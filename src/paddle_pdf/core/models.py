@@ -139,6 +139,20 @@ def get_model_dir(name: str) -> Path:
     return LEGACY_CACHE_ROOT / name
 
 
+def _dir_has_files(path: Path) -> bool:
+    """Check if a directory exists and contains at least one entry.
+
+    Catches PermissionError (Windows ACL issues with paddlex cache dirs).
+    """
+    try:
+        return path.exists() and any(path.iterdir())
+    except PermissionError:
+        logger.warning("Permission denied accessing %s — treating as not cached", path)
+        return False
+    except OSError:
+        return False
+
+
 def is_model_cached(name: str) -> bool:
     """Check if model is cached locally.
 
@@ -152,9 +166,12 @@ def is_model_cached(name: str) -> bool:
     # Check legacy location
     legacy_dir = LEGACY_CACHE_ROOT / name
     if legacy_dir.exists():
-        for f in legacy_dir.rglob("*"):
-            if any(m in f.name for m in ("inference", ".tar", "model")):
-                return True
+        try:
+            for f in legacy_dir.rglob("*"):
+                if any(m in f.name for m in ("inference", ".tar", "model")):
+                    return True
+        except PermissionError:
+            logger.warning("Permission denied scanning legacy cache: %s", legacy_dir)
 
     # Check paddlex location (PaddleOCR 3.x)
     if PADDLEX_CACHE_ROOT.exists():
@@ -162,7 +179,7 @@ def is_model_cached(name: str) -> bool:
         expected_dirs = _PADDLEX_DIRS.get(name, [])
         if expected_dirs:
             all_present = all(
-                (PADDLEX_CACHE_ROOT / d).exists() and any((PADDLEX_CACHE_ROOT / d).iterdir())
+                _dir_has_files(PADDLEX_CACHE_ROOT / d)
                 for d in expected_dirs
                 if d  # skip empty strings
             )
@@ -181,11 +198,13 @@ def is_model_cached(name: str) -> bool:
             }
             prefix = prefix_map.get(lang, "")
             if prefix:
-                for d in PADDLEX_CACHE_ROOT.iterdir():
-                    if d.is_dir() and d.name.startswith(prefix):
-                        # Check it has actual model files
-                        if any(d.iterdir()):
-                            return True
+                try:
+                    for d in PADDLEX_CACHE_ROOT.iterdir():
+                        if d.is_dir() and d.name.startswith(prefix):
+                            if _dir_has_files(d):
+                                return True
+                except PermissionError:
+                    logger.warning("Permission denied scanning paddlex cache: %s", PADDLEX_CACHE_ROOT)
 
     return False
 
