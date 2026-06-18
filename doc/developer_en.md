@@ -175,10 +175,11 @@ Uses PyMuPDF (fitz) to overlay OCR text onto the original PDF in fully transpare
 
 ### Core Algorithm
 
-1. **Font Pre-registration & Embedding**: Detects system CJK fonts, falls back to PyMuPDF's built-in `cjk` font package.
-2. **Font Size Matching (Width-first, Height-truncated Tolerance)**: Prioritizes width-matching (`fs_by_width`), only truncating at a strict height-limit if it exceeds 1.05 times the target height, ensuring the text highlight selection bounding box aligns perfectly with the underlying images.
-3. **Adaptive Character Spacing (TextWriter Single Character Appends)**: Uses `fitz.TextWriter` to append character-by-character, dynamically computing and distributing spacing gap as `(target_width - text_width) / (n - 1)` to keep visual spaces and spacing in multi-word/character structures.
-4. **Precise Baseline Placement**: Removes vertical centering offsets and aligns the text baseline directly based on font ascenders: `baseline_y = ry0 + ascender * fontsize`, completely eliminating line vertical offset/drift.
+1. **High-Resolution Detection Limit**: To address small font (like headers, superscripts) disappearing or merging, a custom detection limit is used. Under GPU execution, `text_det_limit_side_len` defaults to `4320` (supporting lossless detection for A4/B5 pages up to 500 DPI); under CPU, it defaults to `1920` to balance quality with memory and processing time.
+2. **Font Pre-registration & Embedding**: Detects system CJK fonts, falls back to PyMuPDF's built-in `cjk` font package.
+3. **Font Size Matching (Width-first, Height-truncated Tolerance)**: Prioritizes width-matching (`fs_by_width`), only truncating at a strict height-limit if it exceeds 1.05 times the target height, ensuring the text highlight selection bounding box aligns perfectly with the underlying images.
+4. **Adaptive Character Spacing (TextWriter Single Character Appends)**: Uses `fitz.TextWriter` to append character-by-character, dynamically computing and distributing spacing gap as `(target_width - text_width) / (n - 1)` to keep visual spaces and spacing in multi-word/character structures.
+5. **Precise Baseline Placement & Constraint**: Vertically centers the text within the detected bounding box, aligning it using ascenders: `baseline_y = ry0 + (target_height - fontsize) / 2 + ascender * fontsize`. This guarantees that when the OCR bounding box includes extra whitespace or line-separators, the overlay text remains strictly bound and centered inside the `[ry0, ry1]` boundaries, eliminating vertical drift in headers, abstracts, and titles.
 
 ## Environment Setup
 
