@@ -36,10 +36,10 @@ gui = { features = ["gui"], solve-group = "default" }
 dev = { features = ["dev"], solve-group = "default" }
 
 [tasks]
-# CLI
-run = "python -m paddle_pdf"
-run-gpu = "python -m paddle_pdf -gpu"
-check-gpu = "python -m paddle_pdf --diagnose"
+# CLI (PYTHONPATH=src ensures paddle_pdf is importable from source tree)
+run = { cmd = "python -m paddle_pdf", env = { PYTHONPATH = "src" } }
+run-gpu = { cmd = "python -m paddle_pdf -gpu", env = { PYTHONPATH = "src" } }
+check-gpu = { cmd = "python -m paddle_pdf --diagnose", env = { PYTHONPATH = "src" } }
 
 # Frontend (run from src-frontend/)
 frontend-install = { cmd = "pnpm install", cwd = "src-frontend" }
