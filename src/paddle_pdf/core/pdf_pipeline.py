@@ -249,6 +249,8 @@ class PDFProcessor:
 
             ascender = getattr(font, "ascender", 0.8)
 
+            tw = fitz.TextWriter(page.rect)
+
             for line_data in lines:
                 text = line_data.get("text", "").strip()
                 if not text:
@@ -289,30 +291,52 @@ class PDFProcessor:
                 else:
                     fs_by_width = target_height
 
-                fs_by_height = target_height * 0.95
-                fontsize = max(min(fs_by_width, fs_by_height), 1.0)
+                # Width-priority font size calculation with 5% tolerance on height
+                fontsize = min(fs_by_width, target_height * 1.05)
+                fontsize = max(fontsize, 1.0)
 
-                baseline_y = ry0 + (target_height - fontsize) / 2 + ascender * fontsize
-                point = fitz.Point(rx0, baseline_y)
-
+                # Compute character spacing to spread the letters across the target width
                 try:
-                    page.insert_text(
-                        point,
-                        text,
-                        fontsize=fontsize,
-                        fontname=font_name,
-                        render_mode=3,
-                    )
+                    text_w = font.text_length(text, fontsize=fontsize)
                 except Exception:
+                    text_w = 0.0
+
+                n = len(text)
+                if n > 1 and target_width > text_w:
+                    char_spacing = (target_width - text_w) / (n - 1)
+                else:
+                    char_spacing = 0.0
+
+                # Precise baseline positioning using ascender directly
+                baseline_y = ry0 + ascender * fontsize
+
+                # Append each character to the TextWriter
+                x_cursor = rx0
+                for ch in text:
                     try:
-                        page.insert_text(
-                            point,
-                            text,
+                        tw.append(
+                            fitz.Point(x_cursor, baseline_y),
+                            ch,
+                            font=font,
                             fontsize=fontsize,
-                            color=(0.95, 0.95, 0.95),
                         )
                     except Exception:
                         pass
+                    try:
+                        ch_w = font.text_length(ch, fontsize=fontsize)
+                    except Exception:
+                        ch_w = fontsize
+                    x_cursor += ch_w + char_spacing
+
+            # Write text overlay to the page
+            try:
+                tw.write_text(page, render_mode=3)
+            except Exception as e:
+                logger.error(f"Failed to write text to page {page_num} in invisible mode: {e}")
+                try:
+                    tw.write_text(page, color=(0.95, 0.95, 0.95))
+                except Exception as e2:
+                    logger.error(f"Failed to write text to page {page_num} in fallback mode: {e2}")
 
         doc.save(str(output_path), garbage=4, deflate=True)
         doc.close()
