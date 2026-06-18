@@ -3,23 +3,70 @@
  *
  * Key changes vs old version:
  * - ``startTask`` submits to the backend queue and returns immediately (non-blocking).
- * - A single global progress listener routes events by ``task_id``.
+ * - Global listeners for progress, completion, and failure events route by ``task_id``.
  * - ``cancelTask`` targets a specific task by ID.
  */
 import { useTaskStore } from '@/stores/task'
 import { ipcInvoke, ipcListen } from './useIpc'
-import type { OcrOptions, TaskProgress } from '@/types'
+import type { OcrOptions, TaskProgress, TaskResult } from '@/types'
 
-let _progressUnlisten: (() => void) | null = null
+let _listenersSetup = false
+
+/** Payload shape for task://completed events */
+interface TaskCompletedEvent {
+  task_id: string
+  input_path: string
+  output_pdf_path: string
+  output_txt_path: string
+  total_pages: number
+  total_lines: number
+  avg_confidence: number
+  elapsed_seconds: number
+}
+
+/** Payload shape for task://failed / task://cancelled events */
+interface TaskFailedEvent {
+  task_id: string
+  error: string
+}
 
 export function useTask() {
   const store = useTaskStore()
 
-  /** Ensure the global progress listener is running. */
-  async function ensureProgressListener() {
-    if (_progressUnlisten) return
-    _progressUnlisten = await ipcListen<TaskProgress>('task://progress', (progress) => {
+  /** Set up all global event listeners once. */
+  async function ensureListeners() {
+    if (_listenersSetup) return
+    _listenersSetup = true
+
+    // Progress events (per-page updates)
+    await ipcListen<TaskProgress>('task://progress', (progress) => {
       store.updateProgress(progress.task_id, progress)
+    })
+
+    // Completion events (carries full result data)
+    await ipcListen<TaskCompletedEvent>('task://completed', (payload) => {
+      const result: TaskResult = {
+        success: true,
+        input_path: payload.input_path,
+        output_pdf_path: payload.output_pdf_path,
+        output_txt_path: payload.output_txt_path,
+        total_pages: payload.total_pages,
+        total_lines: payload.total_lines,
+        avg_confidence: payload.avg_confidence,
+        elapsed_seconds: payload.elapsed_seconds,
+        error: null,
+      }
+      store.completeTask(payload.task_id, result)
+    })
+
+    // Failure events
+    await ipcListen<TaskFailedEvent>('task://failed', (payload) => {
+      store.failTask(payload.task_id, payload.error)
+    })
+
+    // Cancellation events (backend emits on cancel)
+    await ipcListen<TaskFailedEvent>('task://cancelled', (payload) => {
+      store.cancelTask(payload.task_id)
     })
   }
 
@@ -30,8 +77,8 @@ export function useTask() {
   async function startTask(filePath: string, options: OcrOptions): Promise<string> {
     const id = store.addTask(filePath, options)
 
-    // Make sure the global listener is active
-    await ensureProgressListener()
+    // Make sure global listeners are active
+    await ensureListeners()
 
     // Submit to backend queue (returns instantly)
     await ipcInvoke('process_task', {

@@ -72,6 +72,22 @@ class TaskProgressPayload(BaseModel):
     message: str = ""
     elapsed: float = 0.0
 
+class TaskCompletedPayload(BaseModel):
+    task_id: str
+    success: bool = True
+    input_path: str = ""
+    output_pdf_path: str = ""
+    output_txt_path: str = ""
+    total_pages: int = 0
+    total_lines: int = 0
+    avg_confidence: float = 0.0
+    elapsed_seconds: float = 0.0
+
+class TaskFailedPayload(BaseModel):
+    task_id: str
+    success: bool = False
+    error: str = ""
+
 class CancelTaskRequest(BaseModel):
     task_id: str
 
@@ -149,8 +165,50 @@ def register_commands_pytauri(commands: Any) -> None:
             except Exception:
                 pass
 
-        # Wire up the progress callback (idempotent — safe to call repeatedly)
+        def _on_completed(task_id: str, result) -> None:
+            try:
+                Emitter.emit(
+                    app_handle,
+                    Events.TASK_COMPLETED,
+                    TaskCompletedPayload(
+                        task_id=task_id,
+                        input_path=str(result.input_path),
+                        output_pdf_path=str(result.output_pdf_path) if result.output_pdf_path else "",
+                        output_txt_path=str(result.output_txt_path) if result.output_txt_path else "",
+                        total_pages=result.total_pages,
+                        total_lines=result.total_lines,
+                        avg_confidence=result.avg_confidence,
+                        elapsed_seconds=result.elapsed_seconds,
+                    ),
+                )
+            except Exception:
+                pass
+
+        def _on_failed(task_id: str, error: str) -> None:
+            try:
+                Emitter.emit(
+                    app_handle,
+                    Events.TASK_FAILED,
+                    TaskFailedPayload(task_id=task_id, error=error),
+                )
+            except Exception:
+                pass
+
+        def _on_cancelled(task_id: str) -> None:
+            try:
+                Emitter.emit(
+                    app_handle,
+                    Events.TASK_CANCELLED,
+                    TaskFailedPayload(task_id=task_id, error="Cancelled by user"),
+                )
+            except Exception:
+                pass
+
+        # Wire up callbacks (idempotent — safe to call repeatedly)
         _task_queue.set_progress_callback(_on_progress)
+        _task_queue.set_completion_callback(_on_completed)
+        _task_queue.set_failure_callback(_on_failed)
+        _task_queue.set_cancel_callback(_on_cancelled)
 
         opts = OcrOptions(
             model_name=body.model_name,

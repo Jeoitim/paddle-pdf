@@ -21,8 +21,11 @@ from ..common.schemas import OcrOptions, TaskProgress, TaskResult, TaskStatus
 
 logger = logging.getLogger(__name__)
 
-# Type alias for the progress callback: (task_id, TaskProgress) -> None
+# Type alias for callbacks
 ProgressCallback = Callable[[str, TaskProgress], None]
+CompletionCallback = Callable[[str, TaskResult], None]
+FailureCallback = Callable[[str, str], None]
+CancelCallback = Callable[[str], None]
 
 
 @dataclass
@@ -53,12 +56,27 @@ class TaskQueue:
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self._lock = threading.Lock()
         self._progress_callback: ProgressCallback | None = None
+        self._completion_callback: CompletionCallback | None = None
+        self._failure_callback: FailureCallback | None = None
+        self._cancel_callback: CancelCallback | None = None
 
     # ── public API ────────────────────────────────────────────
 
     def set_progress_callback(self, cb: ProgressCallback | None) -> None:
         """Register the callback that forwards progress events to the frontend."""
         self._progress_callback = cb
+
+    def set_completion_callback(self, cb: CompletionCallback | None) -> None:
+        """Register the callback for task completion (carries result data)."""
+        self._completion_callback = cb
+
+    def set_failure_callback(self, cb: FailureCallback | None) -> None:
+        """Register the callback for task failure."""
+        self._failure_callback = cb
+
+    def set_cancel_callback(self, cb: CancelCallback | None) -> None:
+        """Register the callback for task cancellation."""
+        self._cancel_callback = cb
 
     def add_task(self, task_id: str, input_path: Path, options: OcrOptions) -> QueuedTask:
         """Enqueue a new task.  Returns immediately; the task starts when capacity allows."""
@@ -165,14 +183,30 @@ class TaskQueue:
             task.status = TaskStatus.COMPLETED
             logger.info("Task %s completed", task.task_id)
 
+            if self._completion_callback:
+                try:
+                    self._completion_callback(task.task_id, result)
+                except Exception:
+                    logger.exception("Completion callback failed for task %s", task.task_id)
+
         except InterruptedError:
             task.status = TaskStatus.CANCELLED
             logger.info("Task %s cancelled", task.task_id)
+            if self._cancel_callback:
+                try:
+                    self._cancel_callback(task.task_id)
+                except Exception:
+                    pass
 
         except Exception as e:
             task.error = str(e)
             task.status = TaskStatus.FAILED
             logger.exception("Task %s failed", task.task_id)
+            if self._failure_callback:
+                try:
+                    self._failure_callback(task.task_id, str(e))
+                except Exception:
+                    pass
 
         finally:
             with self._lock:
