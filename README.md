@@ -1,5 +1,7 @@
 # PaddlePDF
 
+> **中文** | [English](README_en.md)
+
 基于 PaddleOCR 的 PDF 文字识别工具，支持 **CLI 命令行** 和 **GUI 图形界面** 两种使用方式。
 
 ## 功能
@@ -148,8 +150,8 @@ paddle_pdf/
 
 ## 文档
 
-- [用户使用指南](doc/user-guide.md) — 详细用法、示例、故障排除
-- [开发者文档](doc/developer.md) — 项目架构、API 差异、踩坑记录
+- [用户使用指南](doc/user-guide.md) ([English](doc/user-guide_en.md)) — 详细用法、示例、故障排除
+- [开发者文档](doc/developer.md) ([English](doc/developer_en.md)) — 项目架构、API 差异、踩坑记录
 
 ## 许可证
 
