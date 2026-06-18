@@ -3,19 +3,20 @@ import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NButton, NIcon, NSpace, NSwitch, NSelect, NCard, NTag,
-  NSpin, NTooltip, NList, NListItem, NThing,
+  NSpin, NList, NListItem, NThing,
 } from 'naive-ui'
 import {
   ArrowBackOutline,
   DownloadOutline,
   CheckmarkCircleOutline,
-  CloudOfflineOutline,
   RefreshOutline,
 } from '@vicons/ionicons5'
+import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@/stores/settings'
 import { useModels } from '@/composables/useModels'
 import GpuStatus from '@/components/GpuStatus.vue'
 
+const { t } = useI18n()
 const router = useRouter()
 const settings = useSettingsStore()
 const {
@@ -30,26 +31,26 @@ onMounted(() => {
 
 const modelOptions = computed(() =>
   models.value.map((m) => ({
-    label: `${m.name} — ${m.desc}${m.cached ? ' ✓' : ''}`,
+    label: `${t('model.' + m.name, m.desc)}${m.cached ? ' ✓' : ''}`,
     value: m.name,
   })),
 )
 
 const dpiOptions = [
-  { label: '150 DPI (fast)', value: 150 },
+  { label: '150 DPI', value: 150 },
   { label: '200 DPI', value: 200 },
   { label: '300 DPI (default)', value: 300 },
-  { label: '400 DPI (dense text)', value: 400 },
-  { label: '600 DPI (highest)', value: 600 },
+  { label: '400 DPI', value: 400 },
+  { label: '600 DPI', value: 600 },
 ]
 
-const maxPagesOptions = [
-  { label: 'All pages', value: 0 },
-  { label: 'First 5 pages', value: 5 },
-  { label: 'First 10 pages', value: 10 },
-  { label: 'First 20 pages', value: 20 },
-  { label: 'First 50 pages', value: 50 },
-]
+const maxPagesOptions = computed(() => [
+  { label: t('settings.allPages'), value: 0 },
+  { label: t('settings.firstNPages', { n: 5 }), value: 5 },
+  { label: t('settings.firstNPages', { n: 10 }), value: 10 },
+  { label: t('settings.firstNPages', { n: 20 }), value: 20 },
+  { label: t('settings.firstNPages', { n: 50 }), value: 50 },
+])
 
 async function handleDownload(name: string) {
   await downloadModel(name)
@@ -64,15 +65,15 @@ async function handleDownload(name: string) {
           <NIcon :component="ArrowBackOutline" />
         </template>
       </NButton>
-      <h1 class="text-lg font-bold">Settings</h1>
+      <h1 class="text-lg font-bold">{{ t('settings.title') }}</h1>
     </header>
 
     <main class="max-w-2xl mx-auto px-6 py-8 space-y-6">
       <!-- Model selection -->
-      <NCard title="OCR Model">
+      <NCard :title="t('settings.modelSection')">
         <NSpace vertical :size="16">
           <div>
-            <label class="block text-sm mb-1 opacity-70">Model</label>
+            <label class="block text-sm mb-1 opacity-70">{{ t('settings.modelLabel') }}</label>
             <NSelect
               :value="settings.options.model_name"
               :options="modelOptions"
@@ -84,7 +85,7 @@ async function handleDownload(name: string) {
       </NCard>
 
       <!-- Model management -->
-      <NCard title="Model Management">
+      <NCard :title="t('settings.modelMgmt')">
         <template #header-extra>
           <NButton quaternary size="small" @click="fetchModels">
             <template #icon><NIcon :component="RefreshOutline" /></template>
@@ -97,9 +98,9 @@ async function handleDownload(name: string) {
               <NThing>
                 <template #header>
                   <div class="flex items-center gap-2">
-                    <span class="font-medium">{{ m.name }}</span>
+                    <span class="font-medium">{{ t('model.' + m.name, m.desc) }}</span>
                     <NTag v-if="m.name === settings.options.model_name" type="primary" size="small">
-                      Selected
+                      {{ t('settings.selected') }}
                     </NTag>
                   </div>
                 </template>
@@ -111,7 +112,7 @@ async function handleDownload(name: string) {
                     disabled
                   >
                     <template #icon><NIcon :component="CheckmarkCircleOutline" /></template>
-                    Cached
+                    {{ t('settings.cached') }}
                   </NButton>
                   <NButton
                     v-else
@@ -121,11 +122,11 @@ async function handleDownload(name: string) {
                     @click.stop="handleDownload(m.name)"
                   >
                     <template #icon><NIcon :component="DownloadOutline" /></template>
-                    Download
+                    {{ t('settings.download') }}
                   </NButton>
                 </template>
                 <template #description>
-                  <p class="text-sm opacity-70">{{ m.desc }}</p>
+                  <p class="text-sm opacity-70">{{ t('model.' + m.name, m.desc) }}</p>
                   <p v-if="m.note" class="text-xs opacity-50 mt-0.5">{{ m.note }}</p>
                 </template>
               </NThing>
@@ -135,10 +136,10 @@ async function handleDownload(name: string) {
       </NCard>
 
       <!-- Processing options -->
-      <NCard title="Processing Options">
+      <NCard :title="t('settings.options')">
         <NSpace vertical :size="16">
           <div>
-            <label class="block text-sm mb-1 opacity-70">DPI (rendering resolution)</label>
+            <label class="block text-sm mb-1 opacity-70">{{ t('settings.dpiLabel') }}</label>
             <NSelect
               :value="settings.options.dpi"
               :options="dpiOptions"
@@ -146,7 +147,7 @@ async function handleDownload(name: string) {
             />
           </div>
           <div>
-            <label class="block text-sm mb-1 opacity-70">Max pages (0 = all)</label>
+            <label class="block text-sm mb-1 opacity-70">{{ t('settings.maxPagesLabel') }}</label>
             <NSelect
               :value="settings.options.max_pages || 0"
               :options="maxPagesOptions"
@@ -155,8 +156,8 @@ async function handleDownload(name: string) {
           </div>
           <div class="flex items-center justify-between">
             <div>
-              <span>Use GPU</span>
-              <p class="text-xs opacity-50">Requires CUDA-enabled PaddlePaddle</p>
+              <span>{{ t('settings.useGpu') }}</span>
+              <p class="text-xs opacity-50">{{ t('settings.useGpuHint') }}</p>
             </div>
             <NSwitch
               :value="settings.options.use_gpu"
@@ -165,8 +166,8 @@ async function handleDownload(name: string) {
           </div>
           <div class="flex items-center justify-between">
             <div>
-              <span>Angle classification</span>
-              <p class="text-xs opacity-50">Detect rotated text (slower)</p>
+              <span>{{ t('settings.angleCls') }}</span>
+              <p class="text-xs opacity-50">{{ t('settings.angleClsHint') }}</p>
             </div>
             <NSwitch
               :value="settings.options.angle_cls"
@@ -175,8 +176,8 @@ async function handleDownload(name: string) {
           </div>
           <div class="flex items-center justify-between">
             <div>
-              <span>Show confidence scores</span>
-              <p class="text-xs opacity-50">Include in text output</p>
+              <span>{{ t('settings.showConf') }}</span>
+              <p class="text-xs opacity-50">{{ t('settings.showConfHint') }}</p>
             </div>
             <NSwitch
               :value="settings.options.show_confidence"
@@ -187,13 +188,13 @@ async function handleDownload(name: string) {
       </NCard>
 
       <!-- GPU Status -->
-      <NCard title="GPU Status">
+      <NCard :title="t('settings.gpuStatus')">
         <GpuStatus :show-details="true" />
       </NCard>
 
       <!-- Actions -->
       <NSpace>
-        <NButton @click="settings.reset()">Reset to defaults</NButton>
+        <NButton @click="settings.reset()">{{ t('settings.reset') }}</NButton>
       </NSpace>
     </main>
   </div>

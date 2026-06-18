@@ -4,26 +4,28 @@ import { CloseCircleOutline, CheckmarkCircleOutline, AlertCircleOutline, TimeOut
 import TaskProgress from './TaskProgress.vue'
 import type { Task } from '@/types'
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const props = defineProps<{ task: Task }>()
 const emit = defineEmits<{ cancel: []; click: [] }>()
 
 const statusConfig = computed(() => {
   switch (props.task.status) {
     case 'completed':
-      return { color: 'success', icon: CheckmarkCircleOutline, label: 'Done' }
+      return { color: 'success', icon: CheckmarkCircleOutline, label: t('task.completed') }
     case 'failed':
-      return { color: 'error', icon: AlertCircleOutline, label: 'Failed' }
+      return { color: 'error', icon: AlertCircleOutline, label: t('task.failed') }
     case 'cancelled':
-      return { color: 'warning', icon: CloseCircleOutline, label: 'Cancelled' }
+      return { color: 'warning', icon: CloseCircleOutline, label: t('task.cancelled') }
     default:
-      return { color: 'info', icon: TimeOutline, label: 'Processing' }
+      return { color: 'info', icon: TimeOutline, label: t('task.pending') }
   }
 })
 
 const elapsedText = computed(() => {
-  if (props.task.result) return `${props.task.result.elapsed_seconds.toFixed(1)}s`
-  if (props.task.progress) return `${props.task.progress.elapsed.toFixed(1)}s`
+  if (props.task.result) return t('task.time', { n: props.task.result.elapsed_seconds.toFixed(1) })
+  if (props.task.progress) return t('task.time', { n: props.task.progress.elapsed.toFixed(1) })
   return ''
 })
 </script>
@@ -48,7 +50,7 @@ const elapsedText = computed(() => {
           type="error"
           @click.stop="emit('cancel')"
         >
-          Cancel
+          {{ t('task.cancel') }}
         </NButton>
       </div>
     </div>
@@ -56,8 +58,9 @@ const elapsedText = computed(() => {
     <TaskProgress v-if="task.progress" :progress="task.progress" />
 
     <div v-if="task.result" class="text-sm opacity-70 mt-1">
-      {{ task.result.total_pages }} pages · {{ task.result.total_lines }} lines ·
-      {{ task.result.avg_confidence.toFixed(1) }}% confidence
+      {{ t('task.pages', { n: task.result.total_pages }) }} ·
+      {{ t('task.lines', { n: task.result.total_lines }) }} ·
+      {{ t('task.confidence', { n: task.result.avg_confidence.toFixed(1) }) }}
     </div>
 
     <div v-if="task.error" class="text-sm text-red-500 mt-1">

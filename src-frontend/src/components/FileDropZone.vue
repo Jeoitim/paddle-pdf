@@ -4,14 +4,15 @@ import { NIcon } from 'naive-ui'
 import { CloudUploadOutline } from '@vicons/ionicons5'
 import { open } from '@tauri-apps/plugin-dialog'
 import { onDragDrop, onDragEnter, onDragLeave } from '@/composables/useIpc'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const props = defineProps<{ disabled?: boolean }>()
 const emit = defineEmits<{ 'files-selected': [paths: string[]] }>()
 const dragging = ref(false)
 const unlisteners: (() => void)[] = []
 
 onMounted(async () => {
-  // Tauri native drag-drop — works across the whole window
   unlisteners.push(
     await onDragDrop((paths) => {
       if (props.disabled) return
@@ -58,9 +59,9 @@ async function openFile() {
     />
     <div class="text-center">
       <p class="text-lg font-medium">
-        {{ dragging ? 'Release to add PDF' : 'Drop PDF files here or click to browse' }}
+        {{ dragging ? t('home.dropZoneActive') : t('home.dropZone') }}
       </p>
-      <p class="text-sm opacity-60 mt-1">Supports .pdf files · Multiple files allowed</p>
+      <p class="text-sm opacity-60 mt-1">{{ t('home.dropZoneHint') }}</p>
     </div>
   </div>
 </template>

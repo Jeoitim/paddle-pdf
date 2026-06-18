@@ -2,7 +2,9 @@
 import { NProgress } from 'naive-ui'
 import type { TaskProgress } from '@/types'
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const props = defineProps<{ progress: TaskProgress }>()
 
 const percentage = computed(() => {
@@ -12,10 +14,10 @@ const percentage = computed(() => {
 
 const statusText = computed(() => {
   switch (props.progress.status) {
-    case 'extracting': return 'Extracting pages...'
-    case 'ocr_running': return `OCR: page ${props.progress.current_page}/${props.progress.total_pages}`
-    case 'saving': return 'Saving output...'
-    default: return props.progress.message || 'Processing...'
+    case 'extracting': return t('task.extracting')
+    case 'ocr_running': return t('task.ocrRunning', { current: props.progress.current_page, total: props.progress.total_pages })
+    case 'saving': return t('task.saving')
+    default: return props.progress.message || t('common.loading')
   }
 })
 </script>

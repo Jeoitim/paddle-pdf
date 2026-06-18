@@ -7,9 +7,12 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ..common.config import MODEL_CACHE_ROOT
-
 logger = logging.getLogger(__name__)
+
+# Legacy cache location
+LEGACY_CACHE_ROOT = Path.home() / ".paddleocr" / "ocr"
+# PaddleOCR 3.x / paddlex cache location
+PADDLEX_CACHE_ROOT = Path.home() / ".paddlex" / "official_models"
 
 MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     "ch": {
@@ -70,6 +73,48 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     },
 }
 
+# Mapping from registry model names to paddlex directory names.
+# PaddleOCR 3.x stores models under ~/.paddlex/official_models/.
+# Each model requires a detection (det) and recognition (rec) model.
+# Shared models (det, cls, doc_ori, textline_ori) are listed separately.
+_PADDLEX_DIRS: dict[str, list[str]] = {
+    "ch": [
+        "PP-OCRv4_mobile_det",
+        "PP-OCRv4_mobile_rec",
+    ],
+    "ch_plus": [
+        "PP-OCRv4_mobile_det",
+        "PP-OCRv4_mobile_rec",
+    ],
+    "ch_server_v2": [
+        "PP-OCRv5_server_det",
+        "PP-OCRv5_server_rec",
+    ],
+    "en": [
+        "PP-OCRv4_mobile_det",  # uses same det model
+        "en_PP-OCRv5_mobile_rec",
+    ],
+    "cyrillic": [
+        "PP-OCRv4_mobile_det",
+        # rec model name may vary; fallback to checking any ru_PP-OCRv4 dir
+    ],
+    "japanese": [
+        "PP-OCRv4_mobile_det",
+        # rec model for japanese
+    ],
+    "korean": [
+        "PP-OCRv4_mobile_det",
+        # rec model for korean
+    ],
+}
+
+# Shared auxiliary models that PaddleOCR downloads for all configs
+_SHARED_MODELS = [
+    "PP-LCNet_x1_0_doc_ori",
+    "PP-LCNet_x1_0_textline_ori",
+    "UVDoc",
+]
+
 
 def get_model_info(name: str) -> dict[str, Any]:
     """Get information about a model by name."""
@@ -90,19 +135,58 @@ def list_models() -> list[dict[str, str]]:
 
 
 def get_model_dir(name: str) -> Path:
-    """Get the model cache directory."""
-    return MODEL_CACHE_ROOT / name
+    """Get the legacy model cache directory."""
+    return LEGACY_CACHE_ROOT / name
 
 
 def is_model_cached(name: str) -> bool:
-    """Check if model is cached locally."""
-    model_dir = get_model_dir(name)
-    if not model_dir.exists():
+    """Check if model is cached locally.
+
+    Checks both:
+    1. Legacy location: ~/.paddleocr/ocr/<name>/
+    2. PaddleOCR 3.x / paddlex location: ~/.paddlex/official_models/
+    """
+    if name not in MODEL_REGISTRY:
         return False
-    markers = ["inference", ".tar", "model"]
-    for f in model_dir.rglob("*"):
-        if any(marker in f.name for marker in markers):
-            return True
+
+    # Check legacy location
+    legacy_dir = LEGACY_CACHE_ROOT / name
+    if legacy_dir.exists():
+        for f in legacy_dir.rglob("*"):
+            if any(m in f.name for m in ("inference", ".tar", "model")):
+                return True
+
+    # Check paddlex location (PaddleOCR 3.x)
+    if PADDLEX_CACHE_ROOT.exists():
+        # Check model-specific directories
+        expected_dirs = _PADDLEX_DIRS.get(name, [])
+        if expected_dirs:
+            all_present = all(
+                (PADDLEX_CACHE_ROOT / d).exists() and any((PADDLEX_CACHE_ROOT / d).iterdir())
+                for d in expected_dirs
+                if d  # skip empty strings
+            )
+            if all_present:
+                return True
+
+        # Fallback: scan for directories matching the model's language prefix
+        lang = MODEL_REGISTRY[name].get("paddle_lang", "")
+        if lang:
+            prefix_map = {
+                "ch": "PP-OCRv",
+                "en": "en_PP-OCRv",
+                "ru": "ru_PP-OCRv",
+                "japan": "japan_PP-OCRv",
+                "korean": "korean_PP-OCRv",
+            }
+            prefix = prefix_map.get(lang, "")
+            if prefix:
+                for d in PADDLEX_CACHE_ROOT.iterdir():
+                    if d.is_dir() and d.name.startswith(prefix):
+                        # Check it has actual model files
+                        if any(d.iterdir()):
+                            return True
+
     return False
 
 
@@ -116,7 +200,7 @@ def download_model(name: str, force: bool = False) -> bool:
     logger.info(f"Model: {name} - {info['desc']}")
 
     if is_model_cached(name) and not force:
-        logger.info(f"Model '{name}' is already cached at {get_model_dir(name)}")
+        logger.info(f"Model '{name}' is already cached")
         return True
 
     logger.info(f"Downloading model '{name}'...")
@@ -128,7 +212,6 @@ def download_model(name: str, force: bool = False) -> bool:
         warnings.filterwarnings("ignore")
         ocr = PaddleOCR(lang=info["paddle_lang"])
 
-        import numpy as np
         from PIL import Image
         import tempfile
 
