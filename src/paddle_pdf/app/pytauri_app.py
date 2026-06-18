@@ -6,21 +6,28 @@ It registers all IPC commands and starts the app.
 
 from __future__ import annotations
 
-from pytauri import Commands
+import sys
+from pathlib import Path
+
+# Ensure the src/ directory is on sys.path so paddle_pdf is importable
+_src_dir = str(Path(__file__).resolve().parent.parent.parent)
+if _src_dir not in sys.path:
+    sys.path.insert(0, _src_dir)
 
 
 def main() -> None:
     """Initialize and run the pytauri app."""
+    from pytauri import Commands
+    from pytauri import app_handle
+
     commands = Commands()
 
-    # Import and register IPC commands
-    # The app_handle is provided by pytauri at runtime
-    from pytauri import app_handle
-    from ..controller.ipc_controller import register_commands
+    # Register all IPC commands from the controller layer
+    from paddle_pdf.controller.ipc_controller import register_commands
 
     register_commands(commands, app_handle)
 
-    # Start the Tauri app (blocking)
+    # Run the Tauri event loop (blocking)
     from pytauri import PyTauri
 
     py_tauri = PyTauri()

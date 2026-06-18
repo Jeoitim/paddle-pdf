@@ -10,8 +10,13 @@ pub fn run() {
                 )?;
             }
 
-            // Initialize pytauri — loads Python and registers IPC commands
-            app.handle().plugin(tauri_plugin_pytauri::init(app.handle()))?;
+            // Initialize pytauri — loads Python interpreter and registers IPC commands
+            // The Python entry point is defined in src/paddle_pdf/app/pytauri_app.py
+            app.handle().plugin(
+                tauri_plugin_pytauri::Builder::new()
+                    .entry_point("paddle_pdf.app.pytauri_app")
+                    .build(app.handle())?,
+            )?;
 
             Ok(())
         })

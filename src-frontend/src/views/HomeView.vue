@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { NButton, NSpace, NIcon } from 'naive-ui'
-import { SettingsOutline, MoonOutline, SunnyOutline } from '@vicons/ionicons5'
+import { onMounted, ref } from 'vue'
+import { NButton, NSpace, NIcon, NEmpty, NText } from 'naive-ui'
+import { SettingsOutline, MoonOutline, SunnyOutline, TrashOutline } from '@vicons/ionicons5'
 import { useAppStore } from '@/stores/app'
 import { useSettingsStore } from '@/stores/settings'
 import { useTaskStore } from '@/stores/task'
@@ -14,8 +15,19 @@ import { useRouter } from 'vue-router'
 const appStore = useAppStore()
 const settingsStore = useSettingsStore()
 const taskStore = useTaskStore()
-const { startTask, cancelTask } = useTask()
+const { startTask, cancelTask, getAppInfo } = useTask()
 const router = useRouter()
+const appVersion = ref('')
+
+onMounted(async () => {
+  try {
+    const info = await getAppInfo()
+    appVersion.value = info.version
+  } catch {
+    // IPC not available (dev mode without Python)
+    appVersion.value = 'dev'
+  }
+})
 
 async function onFileSelected(paths: string[]) {
   for (const path of paths) {
@@ -32,14 +44,17 @@ function viewTask(id: string) {
   <div class="page">
     <!-- Header -->
     <header class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-      <h1 class="text-xl font-bold">PaddlePDF</h1>
+      <div class="flex items-center gap-3">
+        <h1 class="text-xl font-bold">PaddlePDF</h1>
+        <span class="text-xs opacity-40">v{{ appVersion }}</span>
+      </div>
       <NSpace>
-        <NButton quaternary circle @click="appStore.toggleDark">
+        <NButton quaternary circle @click="appStore.toggleDark" :title="appStore.darkMode ? 'Light mode' : 'Dark mode'">
           <template #icon>
             <NIcon :component="appStore.darkMode ? SunnyOutline : MoonOutline" />
           </template>
         </NButton>
-        <NButton quaternary circle @click="router.push('/settings')">
+        <NButton quaternary circle @click="router.push('/settings')" title="Settings">
           <template #icon>
             <NIcon :component="SettingsOutline" />
           </template>
@@ -52,6 +67,7 @@ function viewTask(id: string) {
       <!-- Config bar -->
       <div class="card flex items-center gap-4 flex-wrap">
         <ModelSelector />
+        <div class="flex-1" />
         <GpuStatus />
       </div>
 
@@ -63,7 +79,10 @@ function viewTask(id: string) {
 
       <!-- Active task -->
       <div v-if="taskStore.activeTasks.length > 0" class="space-y-3">
-        <h2 class="text-lg font-semibold">Processing</h2>
+        <h2 class="text-lg font-semibold flex items-center gap-2">
+          <span class="inline-block w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+          Processing
+        </h2>
         <TaskCard
           v-for="task in taskStore.activeTasks"
           :key="task.id"
@@ -77,7 +96,8 @@ function viewTask(id: string) {
       <div v-if="taskStore.completedTasks.length > 0" class="space-y-3">
         <div class="flex items-center justify-between">
           <h2 class="text-lg font-semibold">Completed</h2>
-          <NButton size="small" quaternary @click="taskStore.clearCompleted">
+          <NButton size="small" quaternary type="error" @click="taskStore.clearCompleted">
+            <template #icon><NIcon :component="TrashOutline" /></template>
             Clear all
           </NButton>
         </div>
@@ -87,6 +107,14 @@ function viewTask(id: string) {
           :task="task"
           @click="viewTask(task.id)"
         />
+      </div>
+
+      <!-- Empty state -->
+      <div
+        v-if="taskStore.tasks.length === 0"
+        class="card text-center py-16"
+      >
+        <NEmpty description="No tasks yet. Drop a PDF file above to get started." />
       </div>
     </main>
   </div>

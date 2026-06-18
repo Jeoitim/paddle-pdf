@@ -1,33 +1,30 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { NIcon, NText } from 'naive-ui'
-import { CloudUploadOutline, DocumentOutline } from '@vicons/ionicons5'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { NIcon } from 'naive-ui'
+import { CloudUploadOutline } from '@vicons/ionicons5'
 import { open } from '@tauri-apps/plugin-dialog'
+import { onDragDrop, onDragEnter, onDragLeave } from '@/composables/useIpc'
 
 const props = defineProps<{ disabled?: boolean }>()
 const emit = defineEmits<{ 'files-selected': [paths: string[]] }>()
 const dragging = ref(false)
+const unlisteners: (() => void)[] = []
 
-function onDragOver(e: DragEvent) {
-  e.preventDefault()
-  if (!props.disabled) dragging.value = true
-}
+onMounted(async () => {
+  // Tauri native drag-drop — works across the whole window
+  unlisteners.push(
+    await onDragDrop((paths) => {
+      if (props.disabled) return
+      const pdfs = paths.filter((p) => p.toLowerCase().endsWith('.pdf'))
+      if (pdfs.length > 0) emit('files-selected', pdfs)
+      dragging.value = false
+    }),
+  )
+  unlisteners.push(await onDragEnter(() => { if (!props.disabled) dragging.value = true }))
+  unlisteners.push(await onDragLeave(() => { dragging.value = false }))
+})
 
-function onDragLeave() {
-  dragging.value = false
-}
-
-function onDrop(e: DragEvent) {
-  e.preventDefault()
-  dragging.value = false
-  if (props.disabled) return
-  // Tauri drag-drop provides file paths
-  const paths = e.dataTransfer?.files
-  if (paths && paths.length > 0) {
-    // In Tauri, we need to use the drag-drop event payload
-    // For now, use the native file dialog as primary method
-  }
-}
+onUnmounted(() => unlisteners.forEach((u) => u()))
 
 async function openFile() {
   if (props.disabled) return
@@ -44,22 +41,26 @@ async function openFile() {
 
 <template>
   <div
-    class="card flex flex-col items-center justify-center gap-4 py-12 cursor-pointer transition-all duration-200 border-2 border-dashed"
+    class="card flex flex-col items-center justify-center gap-4 py-12 cursor-pointer transition-all duration-200 border-2 border-dashed select-none"
     :class="[
-      dragging ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-300 dark:border-gray-600 hover:border-blue-400',
+      dragging
+        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 scale-[1.01]'
+        : 'border-gray-300 dark:border-gray-600 hover:border-blue-400',
       disabled ? 'opacity-50 cursor-not-allowed' : '',
     ]"
-    @dragover="onDragOver"
-    @dragleave="onDragLeave"
-    @drop="onDrop"
     @click="openFile"
   >
-    <NIcon :component="CloudUploadOutline" :size="48" class="text-gray-400" />
+    <NIcon
+      :component="CloudUploadOutline"
+      :size="48"
+      :class="dragging ? 'text-blue-500' : 'text-gray-400'"
+      class="transition-colors"
+    />
     <div class="text-center">
       <p class="text-lg font-medium">
-        {{ dragging ? 'Drop PDF here' : 'Drop PDF files or click to select' }}
+        {{ dragging ? 'Release to add PDF' : 'Drop PDF files here or click to browse' }}
       </p>
-      <p class="text-sm opacity-60 mt-1">Supports .pdf files</p>
+      <p class="text-sm opacity-60 mt-1">Supports .pdf files · Multiple files allowed</p>
     </div>
   </div>
 </template>

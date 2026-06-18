@@ -5,7 +5,31 @@
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+.pnpm-store/
+
+# Tauri build output
+src-frontend/src-tauri/target/
+src-frontend/src-tauri/gen/
+
+# Frontend build output
+src-frontend/dist/
 
 # IDE
 .idea/
 .vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+check_env.txt

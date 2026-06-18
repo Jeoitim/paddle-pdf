@@ -14,3 +14,25 @@ export async function ipcInvoke<T>(command: string, args?: Record<string, unknow
 export function ipcListen<T>(event: string, handler: (payload: T) => void): Promise<UnlistenFn> {
   return listen<T>(event, (e) => handler(e.payload))
 }
+
+/** Listen for Tauri drag-drop events */
+export function onDragDrop(handler: (paths: string[]) => void): Promise<UnlistenFn> {
+  return listen<{ paths: string[]; position: { x: number; y: number } }>(
+    'tauri://drag-drop',
+    (e) => {
+      if (e.payload.paths?.length) {
+        handler(e.payload.paths)
+      }
+    },
+  )
+}
+
+/** Listen for Tauri drag-drop hover events */
+export function onDragEnter(handler: () => void): Promise<UnlistenFn> {
+  return listen('tauri://drag-enter', () => handler())
+}
+
+/** Listen for Tauri drag-drop leave events */
+export function onDragLeave(handler: () => void): Promise<UnlistenFn> {
+  return listen('tauri://drag-leave', () => handler())
+}

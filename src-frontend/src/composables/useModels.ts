@@ -8,6 +8,7 @@ import type { ModelInfo, GpuInfo } from '@/types'
 const models = ref<ModelInfo[]>([])
 const gpuInfo = ref<GpuInfo | null>(null)
 const loading = ref(false)
+const downloading = ref<string | null>(null)
 
 export function useModels() {
   async function fetchModels() {
@@ -20,12 +21,37 @@ export function useModels() {
   }
 
   async function fetchGpuInfo() {
-    gpuInfo.value = await ipcInvoke<GpuInfo>('check_gpu')
+    try {
+      gpuInfo.value = await ipcInvoke<GpuInfo>('check_gpu')
+    } catch (e) {
+      gpuInfo.value = { available: false, cuda_version: null, cuda_root: null, device_count: 0, error: String(e) }
+    }
   }
 
   async function downloadModel(name: string) {
-    return ipcInvoke<{ success: boolean }>('download_model', { name })
+    downloading.value = name
+    try {
+      const res = await ipcInvoke<{ success: boolean; name: string }>('download_model', { name })
+      // Refresh model list after download
+      if (res.success) await fetchModels()
+      return res
+    } finally {
+      downloading.value = null
+    }
   }
 
-  return { models, gpuInfo, loading, fetchModels, fetchGpuInfo, downloadModel }
+  async function diagnoseSystem() {
+    return ipcInvoke<Record<string, string>>('diagnose_system')
+  }
+
+  return {
+    models,
+    gpuInfo,
+    loading,
+    downloading,
+    fetchModels,
+    fetchGpuInfo,
+    downloadModel,
+    diagnoseSystem,
+  }
 }

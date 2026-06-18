@@ -9,6 +9,8 @@ platforms = ["win-64"]
 python = ">=3.10,<3.13"
 pillow = ">=10.0.0"
 tqdm = ">=4.66.0"
+nodejs = ">=20"
+pnpm = ">=9"
 
 [pypi-options]
 extra-index-urls = ["https://www.paddlepaddle.org.cn/packages/stable/cu126/"]
@@ -20,11 +22,15 @@ paddleocr = "==3.4.1"
 pymupdf = ">=1.25.0"
 pdf2image = ">=1.17.0"
 
+[feature.gui]
+pypi-dependencies = { pytauri = ">=0.4" }
+
 [feature.dev]
 dependencies = { black = ">=24.0", ruff = ">=0.4.0" }
 
 [environments]
 default = { solve-group = "default" }
+gui = { features = ["gui"], solve-group = "default" }
 dev = { features = ["dev"], solve-group = "default" }
 
 [tasks]
@@ -33,11 +39,14 @@ run = "python -m paddle_pdf"
 run-gpu = "python -m paddle_pdf -gpu"
 check-gpu = "python check_gpu_env.py"
 
-# Frontend (Phase 2+)
-# frontend-dev = { cmd = "pnpm dev", cwd = "src-frontend" }
-# frontend-build = { cmd = "pnpm build", cwd = "src-frontend" }
-# tauri-dev = { cmd = "pnpm tauri dev", cwd = "src-frontend" }
-# tauri-build = { cmd = "pnpm tauri build", cwd = "src-frontend" }
+# Frontend (run from src-frontend/)
+frontend-install = { cmd = "pnpm install", cwd = "src-frontend" }
+frontend-dev = { cmd = "pnpm dev", cwd = "src-frontend" }
+frontend-build = { cmd = "pnpm build", cwd = "src-frontend" }
+
+# Tauri (requires Rust toolchain)
+tauri-dev = { cmd = "pnpm tauri dev", cwd = "src-frontend" }
+tauri-build = { cmd = "pnpm tauri build", cwd = "src-frontend" }
 
 # Dev tools
 lint = "ruff check ."

@@ -37,7 +37,11 @@ export function useTask() {
 
   /** Cancel the active task */
   async function cancelTask() {
-    await ipcInvoke('cancel_task')
+    try {
+      await ipcInvoke('cancel_task')
+    } catch (e) {
+      console.warn('Cancel failed:', e)
+    }
   }
 
   /** Open a file or folder in the system file manager */
@@ -45,5 +49,22 @@ export function useTask() {
     await ipcInvoke('open_path', { path })
   }
 
-  return { startTask, cancelTask, openPath }
+  /** Reveal a file in the system file explorer */
+  async function revealInExplorer(path: string) {
+    await ipcInvoke('reveal_in_explorer', { path })
+  }
+
+  /** Get app info from backend */
+  async function getAppInfo() {
+    return ipcInvoke<{ name: string; version: string; python_version: string; platform: string }>(
+      'get_app_info',
+    )
+  }
+
+  /** Test IPC round-trip */
+  async function greet(name: string = 'World') {
+    return ipcInvoke<string>('greet', { name })
+  }
+
+  return { startTask, cancelTask, openPath, revealInExplorer, getAppInfo, greet }
 }

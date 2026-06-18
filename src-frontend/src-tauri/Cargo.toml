@@ -1,6 +1,6 @@
 [package]
 name = "paddle-pdf"
-version = "0.1.0"
+version = "1.0.0"
 description = "PaddlePDF - PDF OCR Tool with GUI"
 authors = ["you"]
 license = ""
@@ -23,4 +23,5 @@ tauri = { version = "2.11.2", features = ["devtools"] }
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
-pytauri = { version = "0.4" }
+# pytauri — Python bindings for Tauri IPC
+pytauri = "0.4"
