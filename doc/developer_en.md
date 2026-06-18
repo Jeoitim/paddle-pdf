@@ -33,11 +33,12 @@ paddle_pdf/
 │   │   └── gpu_utils.py      #     CUDA detection
 │   ├── service/              #   Service — orchestrates core, reports progress via callbacks
 │   │   ├── ocr_service.py    #     OCR task orchestration
+│   │   ├── task_queue.py     #     Background task queue (ThreadPoolExecutor)
 │   │   ├── model_service.py  #     Model management
 │   │   └── system_service.py #     System diagnostics
 │   ├── controller/           #   Controller — protocol adapter layer
 │   │   ├── cli_controller.py #     argparse CLI
-│   │   └── ipc_controller.py #     pytauri IPC endpoints (11 commands)
+│   │   └── ipc_controller.py #     pytauri IPC endpoints (14 commands)
 │   ├── common/               #   Shared definitions
 │   │   ├── schemas.py        #     dataclass data structures
 │   │   ├── events.py         #     IPC event constants
@@ -136,6 +137,70 @@ async def with_progress(body: MyRequest, app_handle: AppHandle) -> MyResponse:
 - **`app_handle` parameter type must be `AppHandle`**: Cannot use `Any`
 - **Commands returning `bytes`**: The frontend receives raw bytes and must manually `JSON.parse`
 - **`PYTHONPATH` must include the `src/` directory**: Set via env in pixi.toml's tauri tasks
+
+## Task Queue Architecture (TaskQueue)
+
+### Design Overview
+
+`TaskQueue` (`src/paddle_pdf/service/task_queue.py`) implements a background task queue for sequential OCR task execution:
+
+- **Async submission**: `add_task()` returns immediately; the task runs in a background thread
+- **Sequential processing**: `max_workers=1` (default), as GPU memory rarely allows concurrent models
+- **Task isolation**: Each task gets its own `OcrService` instance — model state never leaks between tasks
+- **Callback mechanism**: 4 callback types (progress/completion/failure/cancel) route events to the frontend
+
+### Core Classes
+
+```
+TaskQueue
+├── _tasks: dict[str, QueuedTask]    # All tasks (indexed by task_id)
+├── _queue: list[str]                # task_ids waiting to run (FIFO)
+├── _active: dict[str, OcrService]   # Currently running tasks
+├── _executor: ThreadPoolExecutor    # Background thread pool
+└── _lock: threading.Lock            # Thread-safety lock
+```
+
+### IPC Event Flow
+
+```
+Backend TaskQueue                    Frontend (useTask.ts)
+─────────────────                    ──────────────────────
+progress_callback(task_id, tp)  ──→  task://progress → store.updateProgress
+completion_callback(task_id, r) ──→  task://completed → store.completeTask
+failure_callback(task_id, err)  ──→  task://failed → store.failTask
+cancel_callback(task_id)        ──→  task://cancelled → store.cancelTask
+```
+
+### IPC Command Summary
+
+| Command | Description | Returns |
+|---|---|---|
+| `process_task` | Submit task to queue (returns immediately) | `SimpleResponse` |
+| `cancel_task` | Cancel a specific task | `SimpleResponse` |
+| `get_queue_status` | Get snapshot of all task statuses | `bytes` (JSON) |
+| `remove_task` | Remove a completed/failed/cancelled task | `SimpleResponse` |
+
+### Frontend Task Store
+
+Pinia `task` store maintains the task list with computed slices:
+
+- `pendingTasks`: status === 'pending'
+- `activeTasks`: status ∈ ['extracting', 'ocr_running', 'saving']
+- `completedTasks`: status === 'completed'
+- `finishedTasks`: status ∈ ['completed', 'failed', 'cancelled']
+
+### Frontend Event Listeners
+
+The `useTask` composable registers global event listeners on first call (`ensureListeners()`), routing events by `task_id`:
+
+```typescript
+ipcListen<TaskProgress>('task://progress', (progress) => {
+  store.updateProgress(progress.task_id, progress)
+})
+ipcListen<TaskCompletedEvent>('task://completed', (payload) => {
+  store.completeTask(payload.task_id, result)
+})
+```
 
 ## PaddleOCR 3.x API Key Differences
 

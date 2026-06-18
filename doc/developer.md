@@ -33,11 +33,12 @@ paddle_pdf/
 │   │   └── gpu_utils.py      #     CUDA 检测
 │   ├── service/              #   Service — 编排 core，通过回调上报进度
 │   │   ├── ocr_service.py    #     OCR 任务编排
+│   │   ├── task_queue.py     #     后台任务队列 (ThreadPoolExecutor)
 │   │   ├── model_service.py  #     模型管理
 │   │   └── system_service.py #     系统诊断
 │   ├── controller/           #   Controller — 协议适配层
 │   │   ├── cli_controller.py #     argparse CLI
-│   │   └── ipc_controller.py #     pytauri IPC 端点 (11 个命令)
+│   │   └── ipc_controller.py #     pytauri IPC 端点 (14 个命令)
 │   ├── common/               #   公共定义
 │   │   ├── schemas.py        #     dataclass 数据结构
 │   │   ├── events.py         #     IPC 事件常量
@@ -136,6 +137,70 @@ async def with_progress(body: MyRequest, app_handle: AppHandle) -> MyResponse:
 - **`app_handle` 参数类型必须是 `AppHandle`**：不能用 `Any`
 - **返回 `bytes` 的命令**：前端收到的是原始 bytes，需手动 JSON.parse
 - **`PYTHONPATH` 必须包含 `src/` 目录**：在 pixi.toml 的 tauri tasks 中通过 env 设置
+
+## 任务队列架构 (TaskQueue)
+
+### 设计概述
+
+`TaskQueue`（`src/paddle_pdf/service/task_queue.py`）实现了后台任务队列，支持顺序执行多个 OCR 任务：
+
+- **异步提交**：`add_task()` 立即返回，任务在后台线程执行
+- **顺序处理**：`max_workers=1`（默认），GPU 显存通常不允许并发加载多个模型
+- **任务隔离**：每个任务拥有独立的 `OcrService` 实例，模型状态互不干扰
+- **回调机制**：通过 4 种回调（progress/completion/failure/cancel）将事件路由到前端
+
+### 核心类
+
+```
+TaskQueue
+├── _tasks: dict[str, QueuedTask]    # 所有任务（按 task_id 索引）
+├── _queue: list[str]                # 等待执行的 task_id（FIFO）
+├── _active: dict[str, OcrService]   # 正在运行的任务
+├── _executor: ThreadPoolExecutor    # 后台线程池
+└── _lock: threading.Lock            # 线程安全锁
+```
+
+### IPC 事件流
+
+```
+Backend TaskQueue                    Frontend (useTask.ts)
+─────────────────                    ──────────────────────
+progress_callback(task_id, tp)  ──→  task://progress → store.updateProgress
+completion_callback(task_id, r) ──→  task://completed → store.completeTask
+failure_callback(task_id, err)  ──→  task://failed → store.failTask
+cancel_callback(task_id)        ──→  task://cancelled → store.cancelTask
+```
+
+### IPC 命令总览
+
+| 命令 | 说明 | 返回 |
+|---|---|---|
+| `process_task` | 提交任务到队列（立即返回） | `SimpleResponse` |
+| `cancel_task` | 取消指定任务 | `SimpleResponse` |
+| `get_queue_status` | 获取所有任务状态快照 | `bytes` (JSON) |
+| `remove_task` | 移除已完成/失败/取消的任务 | `SimpleResponse` |
+
+### 前端任务 Store
+
+Pinia `task` store 维护任务列表，通过 computed 属性分片：
+
+- `pendingTasks`：status === 'pending'
+- `activeTasks`：status ∈ ['extracting', 'ocr_running', 'saving']
+- `completedTasks`：status === 'completed'
+- `finishedTasks`：status ∈ ['completed', 'failed', 'cancelled']
+
+### 前端事件监听
+
+`useTask` composable 在首次调用时注册全局事件监听器（`ensureListeners()`），通过 `task_id` 路由事件到对应任务：
+
+```typescript
+ipcListen<TaskProgress>('task://progress', (progress) => {
+  store.updateProgress(progress.task_id, progress)
+})
+ipcListen<TaskCompletedEvent>('task://completed', (payload) => {
+  store.completeTask(payload.task_id, result)
+})
+```
 
 ## PaddleOCR 3.x API 关键差异
 

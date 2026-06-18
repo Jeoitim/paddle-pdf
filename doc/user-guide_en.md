@@ -150,6 +150,34 @@ With `--conf` (with confidence scores):
   Blurry text  [conf:67%]
 ```
 
+## Task Queue (GUI Batch Processing)
+
+The GUI supports a task queue that lets you add multiple PDF files consecutively, processing them one by one in the background:
+
+### How to Use
+
+1. After dragging in or selecting PDF files, tasks are automatically added to the queue
+2. Waiting tasks appear in the **Queue** section, running tasks in the **Processing** section
+3. Each task can be individually **cancelled** (queued tasks are removed directly, running tasks are interrupted)
+4. Completed/failed/cancelled tasks appear in the **Finished** section and can be removed individually or cleared all at once
+
+### Task Status
+
+| Status | Description |
+|---|---|
+| `pending` | Waiting in queue |
+| `extracting` / `ocr_running` / `saving` | Currently processing |
+| `completed` | Processing complete |
+| `failed` | Processing failed (error message available) |
+| `cancelled` | Cancelled |
+
+### Notes
+
+- Tasks run **sequentially** by default (`max_workers=1`), as GPU memory rarely allows concurrent models
+- Each task uses its own `OcrService` instance with isolated model state
+- Cancellation: queued tasks are skipped directly; running tasks are interrupted via `InterruptedError`
+- After task completion, the frontend receives full result data via the `task://completed` event
+
 ## GPU Acceleration
 
 ### Requirements

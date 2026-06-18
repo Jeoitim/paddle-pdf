@@ -10,6 +10,7 @@ A PDF text recognition tool based on PaddleOCR, supporting both **CLI** and **GU
 - **7 Language Models**: Chinese, English, Japanese, Korean, Russian, etc., powered by PP-OCRv4
 - **Searchable PDF**: Precise glyph width measurement + baseline vertical centering; transparent text layer (Render Mode 3) aligned with background text
 - **Plain Text Output**: Saves OCR results as text files (with optional confidence scores)
+- **Task Queue**: Background sequential execution of multiple OCR tasks with queuing, cancellation, and per-task model isolation
 - **GUI**: Drag-and-drop files, real-time progress, model management, GPU status detection
 
 > **⚠️ Note on Searchable PDF Quality**
@@ -85,8 +86,8 @@ pixi run tauri-build
 
 ### GUI Features
 
-- 📄 **Drag & Drop**: Drag in PDF files, supports batch processing
-- 🔄 **Real-Time Progress**: Page-by-page OCR processing progress
+- 📄 **Drag & Drop**: Drag in PDF files, supports batch queue processing
+- 🔄 **Real-Time Progress**: Page-by-page OCR processing progress, cancel running/queued tasks
 - 🧠 **Model Management**: View/download/switch between 7 OCR models
 - 💻 **GPU Status**: Auto-detects CUDA environment, shows GPU availability
 - 🌙 **Dark Mode**: Light/dark theme toggle, settings auto-saved
@@ -117,6 +118,7 @@ paddle_pdf/
 │   │   └── gpu_utils.py      #     CUDA detection
 │   ├── service/              #   Service layer (orchestrates core logic)
 │   │   ├── ocr_service.py    #     OCR task orchestration
+│   │   ├── task_queue.py     #     Background task queue
 │   │   ├── model_service.py  #     Model management
 │   │   └── system_service.py #     System diagnostics
 │   ├── controller/           #   Controller layer (protocol adapters)
