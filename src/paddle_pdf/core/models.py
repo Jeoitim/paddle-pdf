@@ -208,9 +208,34 @@ def download_model(name: str, force: bool = False) -> bool:
     try:
         from paddleocr import PaddleOCR
         import warnings
+        import inspect
 
         warnings.filterwarnings("ignore")
-        ocr = PaddleOCR(lang=info["paddle_lang"])
+        sig = inspect.signature(PaddleOCR.__init__)
+        is_paddlex_backend = "text_detection_model_name" in sig.parameters
+
+        if is_paddlex_backend:
+            paddlex_mapping = {
+                "ch": ("PP-OCRv4_mobile_det", "PP-OCRv4_mobile_rec"),
+                "ch_plus": ("PP-OCRv4_mobile_det", "PP-OCRv4_mobile_rec"),
+                "ch_server_v2": ("PP-OCRv5_server_det", "PP-OCRv5_server_rec"),
+                "en": ("PP-OCRv4_mobile_det", "en_PP-OCRv5_mobile_rec"),
+            }
+            if name in paddlex_mapping:
+                ocr = PaddleOCR(
+                    text_detection_model_name=paddlex_mapping[name][0],
+                    text_recognition_model_name=paddlex_mapping[name][1],
+                    use_doc_unwarping=False,
+                    use_doc_orientation_classify=False
+                )
+            else:
+                ocr = PaddleOCR(
+                    lang=info["paddle_lang"],
+                    use_doc_unwarping=False,
+                    use_doc_orientation_classify=False
+                )
+        else:
+            ocr = PaddleOCR(lang=info["paddle_lang"])
 
         from PIL import Image
         import tempfile

@@ -183,18 +183,41 @@ class PaddleOCREngine:
         if self.verbose:
             logger.info(f"Initializing PaddleOCR (GPU={self.use_gpu})")
 
-        model_dir = self._get_model_dir(self.model_name)
-        if self.is_model_available(self.model_name):
-            ocr_kwargs["det_model_dir"] = str(model_dir / "det")
-            ocr_kwargs["rec_model_dir"] = str(model_dir / "rec")
-            ocr_kwargs["cls_model_dir"] = str(model_dir / "cls")
+        # Check if PaddleOCR is 3.x (Paddlex backend)
+        import inspect
+        sig = inspect.signature(PaddleOCR.__init__)
+        is_paddlex_backend = "text_detection_model_name" in sig.parameters
 
-        if self.verbose:
-            logger.info(f"  model: {self.model_name}")
-            logger.info(f"  lang: {config['lang']}")
-            logger.info(
-                f"  det_model_dir: {ocr_kwargs.get('det_model_dir', 'default')}"
-            )
+        if is_paddlex_backend:
+            # Map name to paddlex model names
+            paddlex_mapping = {
+                "ch": ("PP-OCRv4_mobile_det", "PP-OCRv4_mobile_rec"),
+                "ch_plus": ("PP-OCRv4_mobile_det", "PP-OCRv4_mobile_rec"),
+                "ch_server_v2": ("PP-OCRv5_server_det", "PP-OCRv5_server_rec"),
+                "en": ("PP-OCRv4_mobile_det", "en_PP-OCRv5_mobile_rec"),
+            }
+            if self.model_name in paddlex_mapping:
+                ocr_kwargs["text_detection_model_name"] = paddlex_mapping[self.model_name][0]
+                ocr_kwargs["text_recognition_model_name"] = paddlex_mapping[self.model_name][1]
+            
+            # Disable unwarping and orientation classification to keep original scanned coordinates intact
+            ocr_kwargs["use_doc_unwarping"] = False
+            ocr_kwargs["use_doc_orientation_classify"] = False
+            
+            if self.verbose:
+                logger.info(f"  Paddlex backend detected")
+                logger.info(f"  text_detection_model_name: {ocr_kwargs.get('text_detection_model_name', 'default')}")
+                logger.info(f"  text_recognition_model_name: {ocr_kwargs.get('text_recognition_model_name', 'default')}")
+        else:
+            model_dir = self._get_model_dir(self.model_name)
+            if self.is_model_available(self.model_name):
+                ocr_kwargs["det_model_dir"] = str(model_dir / "det")
+                ocr_kwargs["rec_model_dir"] = str(model_dir / "rec")
+                ocr_kwargs["cls_model_dir"] = str(model_dir / "cls")
+            
+            if self.verbose:
+                logger.info(f"  Legacy backend detected")
+                logger.info(f"  det_model_dir: {ocr_kwargs.get('det_model_dir', 'default')}")
 
         self._ocr = PaddleOCR(**ocr_kwargs)
         self._initialized = True
