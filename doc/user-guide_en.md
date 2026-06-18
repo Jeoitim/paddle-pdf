@@ -1,5 +1,15 @@
 # User Guide
 
+## ⚠️ Important: Searchable PDF Quality Expectations
+
+The positioning accuracy of the searchable text layer depends heavily on:
+
+- **Layout complexity**: Simpler layouts (single column, no mixed text/images) produce better results
+- **Source file clarity**: Higher quality scans/photos lead to more accurate OCR and tighter text alignment
+- **Model size**: Larger models (e.g., `ch_server_v2`) significantly outperform lightweight ones
+
+If the source file quality is mediocre, a smaller model is used, or CUDA acceleration is unavailable, the experience degrades significantly. **Do not expect out-of-the-box accuracy** — choose the appropriate model and DPI settings based on your needs.
+
 ## Quick Start
 
 ### Installation
