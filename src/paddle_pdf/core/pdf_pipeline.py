@@ -307,8 +307,8 @@ class PDFProcessor:
                 else:
                     char_spacing = 0.0
 
-                # Precise baseline positioning using ascender directly
-                baseline_y = ry0 + ascender * fontsize
+                # Precise baseline positioning, centering the text vertically within the bounding box
+                baseline_y = ry0 + (target_height - fontsize) / 2 + ascender * fontsize
 
                 # Append each character to the TextWriter
                 x_cursor = rx0

@@ -86,11 +86,13 @@ class PaddleOCREngine:
         use_gpu: bool = False,
         model_name: str = "ch",
         use_angle_cls: bool = True,
+        det_limit_side_len: int | None = None,
         verbose: bool = False,
     ):
         self.use_gpu = use_gpu
         self.model_name = model_name
         self.use_angle_cls = use_angle_cls
+        self.det_limit_side_len = det_limit_side_len
         self.verbose = verbose
         self._ocr = None
         self._initialized = False
@@ -162,10 +164,19 @@ class PaddleOCREngine:
         else:
             paddle.device.set_device("cpu")
 
+        # Determine det_limit_side_len:
+        # If specified by user, use it.
+        # Otherwise, GPU mode defaults to 4320 to maximize quality (supports up to 500 DPI for typical pages),
+        # while CPU mode defaults to 1920 (balancing quality and CPU memory/time).
+        if self.det_limit_side_len is not None:
+            limit_side_len = self.det_limit_side_len
+        else:
+            limit_side_len = 4320 if self.use_gpu else 1920
+
         ocr_kwargs: dict[str, Any] = {
             "use_textline_orientation": self.use_angle_cls,
             "lang": config["lang"],
-            "text_det_limit_side_len": config.get("det_limit_side_len", 960),
+            "text_det_limit_side_len": limit_side_len,
             "text_det_limit_type": config.get("det_limit_type", "max"),
         }
 
