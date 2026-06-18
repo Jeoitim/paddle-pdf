@@ -1,0 +1,11 @@
+# Pixi environment
+.pixi/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.idea/
+.vscode/

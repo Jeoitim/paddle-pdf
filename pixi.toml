@@ -1,0 +1,35 @@
+[workspace]
+name = "pdf-ocr-cli"
+version = "1.0.0"
+description = "PDF OCR CLI tool with PaddleOCR GPU/CPU support"
+channels = ["conda-forge"]
+platforms = ["win-64"]
+
+[dependencies]
+python = ">=3.10,<3.13"
+pillow = ">=10.0.0"
+tqdm = ">=4.66.0"
+
+[pypi-options]
+extra-index-urls = ["https://www.paddlepaddle.org.cn/packages/stable/cu126/"]
+index-strategy = "unsafe-best-match"
+
+[pypi-dependencies]
+paddlepaddle-gpu = "==3.3.0"
+paddleocr = "==3.4.1"
+pymupdf = ">=1.25.0"
+pdf2image = ">=1.17.0"
+
+[feature.dev]
+dependencies = { black = ">=24.0", ruff = ">=0.4.0" }
+
+[environments]
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
+
+[tasks]
+run = "python main.py"
+run-gpu = "python main.py -gpu"
+check-gpu = "python check_gpu_env.py"
+lint = "ruff check ."
+format = "black ."
