@@ -39,7 +39,7 @@ dev = { features = ["dev"], solve-group = "default" }
 # CLI
 run = "python -m paddle_pdf"
 run-gpu = "python -m paddle_pdf -gpu"
-check-gpu = "python check_gpu_env.py"
+check-gpu = "python -m paddle_pdf --diagnose"
 
 # Frontend (run from src-frontend/)
 frontend-install = { cmd = "pnpm install", cwd = "src-frontend" }

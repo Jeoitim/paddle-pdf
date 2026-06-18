@@ -86,6 +86,10 @@ Usage Examples:
         help="force re-download of the OCR model",
     )
     parser.add_argument(
+        "--diagnose", action="store_true",
+        help="run GPU/environment diagnostics and exit",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true", help="show detailed progress and timing",
     )
     parser.add_argument("--version", action="version", version="%(prog)s 1.0.0")
@@ -119,6 +123,24 @@ def main() -> int:
         print()
         print("Default model: ch")
         print("Usage: pdf2txt -model=<name> -i <file>")
+        return 0
+
+    # --diagnose
+    if args.diagnose:
+        sys_svc = SystemService()
+        print("GPU / Environment Diagnostics")
+        print("=" * 40)
+        info = sys_svc.check_gpu()
+        print(f"  GPU available:   {info.available}")
+        print(f"  CUDA version:    {info.cuda_version or 'N/A'}")
+        print(f"  CUDA root:       {info.cuda_root or 'N/A'}")
+        print(f"  Device count:    {info.device_count}")
+        if info.error:
+            print(f"  Error:           {info.error}")
+        print()
+        diag = sys_svc.diagnose()
+        for k, v in diag.items():
+            print(f"  {k}: {v}")
         return 0
 
     # Validate input
