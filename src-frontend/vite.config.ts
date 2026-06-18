@@ -17,6 +17,10 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    // Ignore Rust build directory — Cargo .exe files lock during compilation
+    watch: {
+      ignored: ['**/src-tauri/**'],
+    },
   },
   envPrefix: ['VITE_', 'TAURI_'],
   build: {

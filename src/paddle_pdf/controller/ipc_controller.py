@@ -1,200 +1,242 @@
 """IPC controller — pytauri command endpoints for the GUI frontend.
 
-All commands accept simple JSON-serializable args and return dicts.
-The frontend calls these via `invoke("command_name", {args})`.
+Commands use pytauri's Commands API:
+  - Each command receives `body: BaseModel` and `app_handle: AppHandle`
+  - Returns a BaseModel (serialized to JSON) or bytes
+  - Must be async and must not block
 """
-
-from __future__ import annotations
 
 import os
 import platform
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
-from ..common.schemas import OcrOptions, TaskProgress, TaskStatus
-from ..common.events import Events
+from pydantic import BaseModel
+from pytauri import AppHandle, Emitter
+
 from ..common.config import APP_NAME, APP_VERSION
-from ..service.ocr_service import OcrService
+from ..common.events import Events
+from ..common.schemas import OcrOptions, TaskProgress
 from ..service.model_service import ModelService
+from ..service.ocr_service import OcrService
 from ..service.system_service import SystemService
 
 
-# Singleton services (stateless wrappers, safe to reuse)
+# ── Request / Response Models ──────────────────────────────────
+
+class EmptyBody(BaseModel):
+    """For commands that take no meaningful parameters."""
+    pass
+
+class GreetRequest(BaseModel):
+    name: str = "World"
+
+class GreetResponse(BaseModel):
+    message: str
+
+class AppInfoResponse(BaseModel):
+    name: str
+    version: str
+    python_version: str
+    platform: str
+    arch: str
+
+class ProcessTaskRequest(BaseModel):
+    input_path: str
+    model_name: str = "ch"
+    use_gpu: bool = False
+    dpi: int = 300
+    max_pages: Optional[int] = None
+    angle_cls: bool = True
+    show_confidence: bool = False
+
+class TaskResultResponse(BaseModel):
+    success: bool
+    input_path: Optional[str] = None
+    output_pdf_path: Optional[str] = None
+    output_txt_path: Optional[str] = None
+    total_pages: int = 0
+    total_lines: int = 0
+    avg_confidence: float = 0.0
+    elapsed_seconds: float = 0.0
+    error: Optional[str] = None
+
+class TaskProgressPayload(BaseModel):
+    status: str
+    current_page: int = 0
+    total_pages: int = 0
+    message: str = ""
+    elapsed: float = 0.0
+
+class DownloadModelRequest(BaseModel):
+    name: str
+    force: bool = False
+
+class DownloadModelResponse(BaseModel):
+    success: bool
+    name: str
+
+class GpuInfoResponse(BaseModel):
+    available: bool = False
+    cuda_version: Optional[str] = None
+    cuda_root: Optional[str] = None
+    device_count: int = 0
+    error: Optional[str] = None
+
+class OpenPathRequest(BaseModel):
+    path: str
+
+class SimpleResponse(BaseModel):
+    success: bool
+    error: Optional[str] = None
+
+
+# ── Singleton services ─────────────────────────────────────────
+
 _model_svc = ModelService()
 _system_svc = SystemService()
-
-# Active task reference (single-task model for now)
 _active_service: OcrService | None = None
 
 
-def register_commands(commands: Any, app_handle: Any) -> None:
-    """Register all IPC commands on the pytauri Commands object.
+# ── Command Registration ───────────────────────────────────────
 
-    Args:
-        commands: pytauri Commands instance
-        app_handle: Tauri AppHandle for emitting events
-    """
-
-    # ── Test / Info ──────────────────────────────────────────────
+def register_commands_pytauri(commands: Any) -> None:
+    """Register all IPC commands using pytauri's Commands API."""
 
     @commands.command()
-    async def greet(name: str = "World") -> str:
-        """Test command — verify IPC round-trip works."""
-        return f"Hello, {name}! {APP_NAME} v{APP_VERSION} is running."
+    async def greet(body: GreetRequest) -> GreetResponse:
+        return GreetResponse(message=f"Hello, {body.name}! {APP_NAME} v{APP_VERSION} is running.")
 
     @commands.command()
-    async def get_app_info() -> dict[str, Any]:
-        """Return app metadata for the frontend header/about dialog."""
-        return {
-            "name": APP_NAME,
-            "version": APP_VERSION,
-            "python_version": platform.python_version(),
-            "platform": platform.system(),
-            "arch": platform.machine(),
-        }
+    async def get_app_info(body: EmptyBody) -> AppInfoResponse:
+        return AppInfoResponse(
+            name=APP_NAME,
+            version=APP_VERSION,
+            python_version=platform.python_version(),
+            platform=platform.system(),
+            arch=platform.machine(),
+        )
 
     @commands.command()
-    async def get_version() -> str:
-        """Return app version string."""
-        return APP_VERSION
-
-    # ── OCR Processing ───────────────────────────────────────────
+    async def get_version(body: EmptyBody) -> bytes:
+        return APP_VERSION.encode()
 
     @commands.command()
-    async def process_task(input_path: str, options: dict[str, Any]) -> dict[str, Any]:
-        """Start an OCR task. Emits progress events via app_handle."""
-        nonlocal _active_service
+    async def process_task(body: ProcessTaskRequest, app_handle: AppHandle) -> TaskResultResponse:
+        global _active_service
         _active_service = OcrService()
 
         opts = OcrOptions(
-            model_name=options.get("model_name", "ch"),
-            use_gpu=options.get("use_gpu", False),
-            dpi=options.get("dpi", 300),
-            max_pages=options.get("max_pages"),
-            angle_cls=options.get("angle_cls", True),
-            show_confidence=options.get("show_confidence", False),
+            model_name=body.model_name,
+            use_gpu=body.use_gpu,
+            dpi=body.dpi,
+            max_pages=body.max_pages,
+            angle_cls=body.angle_cls,
+            show_confidence=body.show_confidence,
         )
 
         def _on_progress(tp: TaskProgress):
             try:
-                app_handle.emit(
+                Emitter.emit(
+                    app_handle,
                     Events.TASK_PROGRESS,
-                    {
-                        "status": tp.status.value,
-                        "current_page": tp.current_page,
-                        "total_pages": tp.total_pages,
-                        "message": tp.message,
-                        "elapsed": tp.elapsed,
-                    },
+                    TaskProgressPayload(
+                        status=tp.status.value,
+                        current_page=tp.current_page,
+                        total_pages=tp.total_pages,
+                        message=tp.message,
+                        elapsed=tp.elapsed,
+                    ),
                 )
             except Exception:
-                pass  # Don't let emit errors crash the processing
+                pass
 
         try:
             result = _active_service.process_pdf(
-                input_path=Path(input_path),
+                input_path=Path(body.input_path),
                 options=opts,
                 progress_callback=_on_progress,
             )
-            result_dict = {
-                "input_path": str(result.input_path),
-                "output_pdf_path": str(result.output_pdf_path) if result.output_pdf_path else None,
-                "output_txt_path": str(result.output_txt_path) if result.output_txt_path else None,
-                "total_pages": result.total_pages,
-                "total_lines": result.total_lines,
-                "avg_confidence": result.avg_confidence,
-                "elapsed_seconds": result.elapsed_seconds,
-            }
-            try:
-                app_handle.emit(Events.TASK_COMPLETED, result_dict)
-            except Exception:
-                pass
-            return {"success": True, "result": result_dict}
+            resp = TaskResultResponse(
+                success=True,
+                input_path=str(result.input_path),
+                output_pdf_path=str(result.output_pdf_path) if result.output_pdf_path else None,
+                output_txt_path=str(result.output_txt_path) if result.output_txt_path else None,
+                total_pages=result.total_pages,
+                total_lines=result.total_lines,
+                avg_confidence=result.avg_confidence,
+                elapsed_seconds=result.elapsed_seconds,
+            )
+            return resp
         except InterruptedError:
-            return {"success": False, "error": "Cancelled by user"}
+            return TaskResultResponse(success=False, error="Cancelled by user")
         except Exception as e:
-            error_dict = {"error": str(e)}
-            try:
-                app_handle.emit(Events.TASK_FAILED, error_dict)
-            except Exception:
-                pass
-            return {"success": False, "error": str(e)}
+            return TaskResultResponse(success=False, error=str(e))
         finally:
             _active_service = None
 
     @commands.command()
-    async def cancel_task() -> dict[str, Any]:
-        """Cancel the currently running task."""
+    async def cancel_task(body: EmptyBody) -> SimpleResponse:
         if _active_service:
             _active_service.cancel()
-            return {"success": True}
-        return {"success": False, "error": "No active task"}
-
-    # ── Models ───────────────────────────────────────────────────
+            return SimpleResponse(success=True)
+        return SimpleResponse(success=False, error="No active task")
 
     @commands.command()
-    async def list_models() -> list[dict[str, Any]]:
-        """Return all available models with cache status."""
-        return [asdict(m) for m in _model_svc.list_models()]
+    async def list_models(body: EmptyBody) -> bytes:
+        import json
+        models = [asdict(m) for m in _model_svc.list_models()]
+        return json.dumps(models).encode()
 
     @commands.command()
-    async def download_model(name: str, force: bool = False) -> dict[str, Any]:
-        """Download a specific model."""
-        ok = _model_svc.download(name, force=force)
-        return {"success": ok, "name": name}
-
-    # ── System ───────────────────────────────────────────────────
+    async def download_model(body: DownloadModelRequest) -> DownloadModelResponse:
+        ok = _model_svc.download(body.name, force=body.force)
+        return DownloadModelResponse(success=ok, name=body.name)
 
     @commands.command()
-    async def check_gpu() -> dict[str, Any]:
-        """Check GPU availability."""
+    async def check_gpu(body: EmptyBody) -> GpuInfoResponse:
         info = _system_svc.check_gpu()
-        return asdict(info)
+        return GpuInfoResponse(
+            available=info.available,
+            cuda_version=info.cuda_version,
+            cuda_root=info.cuda_root,
+            device_count=info.device_count,
+            error=info.error,
+        )
 
     @commands.command()
-    async def diagnose_system() -> dict[str, str]:
-        """Full system diagnosis."""
-        return _system_svc.diagnose()
-
-    # ── File System ──────────────────────────────────────────────
+    async def diagnose_system(body: EmptyBody) -> bytes:
+        import json
+        return json.dumps(_system_svc.diagnose()).encode()
 
     @commands.command()
-    async def select_file() -> dict[str, Any]:
-        """Open native file dialog. Returns selected path or None."""
-        # The frontend uses Tauri's dialog API directly.
-        # This command is a fallback.
-        return {"path": None, "note": "Use Tauri dialog API from frontend"}
-
-    @commands.command()
-    async def open_path(path: str) -> dict[str, Any]:
-        """Open a file or folder in the system file manager."""
+    async def open_path(body: OpenPathRequest) -> SimpleResponse:
         try:
             if platform.system() == "Windows":
-                os.startfile(path)
+                os.startfile(body.path)
             elif platform.system() == "Darwin":
                 import subprocess
-                subprocess.Popen(["open", path])
+                subprocess.Popen(["open", body.path])
             else:
                 import subprocess
-                subprocess.Popen(["xdg-open", path])
-            return {"success": True}
+                subprocess.Popen(["xdg-open", body.path])
+            return SimpleResponse(success=True)
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            return SimpleResponse(success=False, error=str(e))
 
     @commands.command()
-    async def reveal_in_explorer(path: str) -> dict[str, Any]:
-        """Open the containing folder and select the file."""
+    async def reveal_in_explorer(body: OpenPathRequest) -> SimpleResponse:
         try:
             if platform.system() == "Windows":
                 import subprocess
-                subprocess.Popen(["explorer", "/select,", path])
+                subprocess.Popen(["explorer", "/select,", body.path])
             elif platform.system() == "Darwin":
                 import subprocess
-                subprocess.Popen(["open", "-R", path])
+                subprocess.Popen(["open", "-R", body.path])
             else:
                 import subprocess
-                subprocess.Popen(["xdg-open", str(Path(path).parent)])
-            return {"success": True}
+                subprocess.Popen(["xdg-open", str(Path(body.path).parent)])
+            return SimpleResponse(success=True)
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            return SimpleResponse(success=False, error=str(e))

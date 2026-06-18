@@ -14,7 +14,9 @@ export function useModels() {
   async function fetchModels() {
     loading.value = true
     try {
-      models.value = await ipcInvoke<ModelInfo[]>('list_models')
+      // list_models returns bytes (JSON encoded)
+      const raw = await ipcInvoke<string>('list_models', {})
+      models.value = typeof raw === 'string' ? JSON.parse(raw) : raw
     } finally {
       loading.value = false
     }
@@ -22,7 +24,7 @@ export function useModels() {
 
   async function fetchGpuInfo() {
     try {
-      gpuInfo.value = await ipcInvoke<GpuInfo>('check_gpu')
+      gpuInfo.value = await ipcInvoke<GpuInfo>('check_gpu', {})
     } catch (e) {
       gpuInfo.value = { available: false, cuda_version: null, cuda_root: null, device_count: 0, error: String(e) }
     }
@@ -32,7 +34,6 @@ export function useModels() {
     downloading.value = name
     try {
       const res = await ipcInvoke<{ success: boolean; name: string }>('download_model', { name })
-      // Refresh model list after download
       if (res.success) await fetchModels()
       return res
     } finally {
@@ -41,7 +42,8 @@ export function useModels() {
   }
 
   async function diagnoseSystem() {
-    return ipcInvoke<Record<string, string>>('diagnose_system')
+    const raw = await ipcInvoke<string>('diagnose_system', {})
+    return typeof raw === 'string' ? JSON.parse(raw) : raw
   }
 
   return {

@@ -21,9 +21,11 @@ paddlepaddle-gpu = "==3.3.0"
 paddleocr = "==3.4.1"
 pymupdf = ">=1.25.0"
 pdf2image = ">=1.17.0"
+pytauri = ">=0.4"
+anyio = ">=4"
 
 [feature.gui]
-pypi-dependencies = { pytauri = ">=0.4" }
+pypi-dependencies = { pytauri = ">=0.4", anyio = ">=4" }
 
 [feature.dev]
 dependencies = { black = ">=24.0", ruff = ">=0.4.0" }
@@ -45,8 +47,10 @@ frontend-dev = { cmd = "pnpm dev", cwd = "src-frontend" }
 frontend-build = { cmd = "pnpm build", cwd = "src-frontend" }
 
 # Tauri (requires Rust toolchain)
-tauri-dev = { cmd = "pnpm tauri dev", cwd = "src-frontend" }
-tauri-build = { cmd = "pnpm tauri build", cwd = "src-frontend" }
+# PYO3_PYTHON: points Cargo to pixi's Python 3.12
+# PYTHONPATH:  ensures the embedded Python can find paddle_pdf package
+tauri-dev = { cmd = "pnpm tauri dev", cwd = "src-frontend", env = { PYO3_PYTHON = "python", PYTHONPATH = "../src" } }
+tauri-build = { cmd = "pnpm tauri build", cwd = "src-frontend", env = { PYO3_PYTHON = "python", PYTHONPATH = "../src" } }
 
 # Dev tools
 lint = "ruff check ."

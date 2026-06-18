@@ -18,13 +18,22 @@ export function useTask() {
     })
 
     try {
-      const res = await ipcInvoke<{ success: boolean; result?: TaskResult; error?: string }>(
+      // pytauri process_task receives body as JSON
+      const res = await ipcInvoke<TaskResult>(
         'process_task',
-        { input_path: filePath, options },
+        {
+          input_path: filePath,
+          model_name: options.model_name,
+          use_gpu: options.use_gpu,
+          dpi: options.dpi,
+          max_pages: options.max_pages,
+          angle_cls: options.angle_cls,
+          show_confidence: options.show_confidence,
+        },
       )
 
-      if (res.success && res.result) {
-        store.completeTask(id, res.result)
+      if (res.success) {
+        store.completeTask(id, res)
       } else {
         store.failTask(id, res.error || 'Unknown error')
       }
@@ -38,7 +47,7 @@ export function useTask() {
   /** Cancel the active task */
   async function cancelTask() {
     try {
-      await ipcInvoke('cancel_task')
+      await ipcInvoke('cancel_task', {})
     } catch (e) {
       console.warn('Cancel failed:', e)
     }
@@ -58,12 +67,13 @@ export function useTask() {
   async function getAppInfo() {
     return ipcInvoke<{ name: string; version: string; python_version: string; platform: string }>(
       'get_app_info',
+      {},
     )
   }
 
   /** Test IPC round-trip */
   async function greet(name: string = 'World') {
-    return ipcInvoke<string>('greet', { name })
+    return ipcInvoke<{ message: string }>('greet', { name })
   }
 
   return { startTask, cancelTask, openPath, revealInExplorer, getAppInfo, greet }

@@ -29,13 +29,15 @@ export interface TaskProgress {
 
 /** Final result returned by Python after processing */
 export interface TaskResult {
-  input_path: string
+  success: boolean
+  input_path: string | null
   output_pdf_path: string | null
   output_txt_path: string | null
   total_pages: number
   total_lines: number
   avg_confidence: number
   elapsed_seconds: number
+  error: string | null
 }
 
 /** Model info from Python backend */

@@ -26,6 +26,9 @@ importers:
       pinia:
         specifier: ^3.0.4
         version: 3.0.4(typescript@6.0.3)(vue@3.5.38(typescript@6.0.3))
+      tauri-plugin-pytauri-api:
+        specifier: 0.4.0
+        version: 0.4.0
       vue:
         specifier: ^3.5.34
         version: 3.5.38(typescript@6.0.3)
@@ -1111,6 +1114,9 @@ packages:
     resolution: {integrity: sha512-H+ue8Zo4vJmV2nRjpx86P35lzwDT3nItnIsocgumgr0hHMQ+ZGq5vrERg9kJBo5AWGmxZDhzDo+WVIJqkB0cGA==}
     engines: {node: '>=16'}
 
+  tauri-plugin-pytauri-api@0.4.0:
+    resolution: {integrity: sha512-4ZKKEvV9ZWZ0wqCxeSR0XIf1vA7dffsf4At7DO1UI3Pxb6CMpNKqTcQmKQCnY9t0MD1z1zuVmbyFh++ysdch4g==}
+
   tinyexec@1.2.4:
     resolution: {integrity: sha512-SHf/r48b7vOrjve9PxJo3MN5v5yuyjHvdUcrQffT3WXMUfnGmHDVbC4k3sHJaJTgZCwpUplIaAo5ANtMyp3YHg==}
     engines: {node: '>=18'}
@@ -2187,6 +2193,10 @@ snapshots:
   superjson@2.2.6:
     dependencies:
       copy-anything: 4.0.5
+
+  tauri-plugin-pytauri-api@0.4.0:
+    dependencies:
+      '@tauri-apps/api': 2.11.1
 
   tinyexec@1.2.4: {}
 

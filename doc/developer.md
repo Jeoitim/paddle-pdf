@@ -2,47 +2,140 @@
 
 ## 项目概述
 
-基于 PaddleOCR 的 PDF 文字识别 CLI 工具，支持 GPU/CPU 双模式，输出可搜索 PDF + 纯文本。
+基于 PaddleOCR 的 PDF 文字识别工具，支持 **CLI 命令行** 和 **GUI 图形界面** 两种使用方式。GUI 基于 pytauri（Python + Tauri + Vue 3）实现跨平台桌面应用。
 
 ## 技术栈
 
-| 组件 | 版本 |
-|------|------|
-| Python | 3.12 |
-| PaddlePaddle | 3.3.0 (GPU) |
-| PaddleOCR | 3.4.1 |
-| PyMuPDF (fitz) | 1.27+ |
-| 包管理 | pixi 0.68+ |
+| 层级 | 技术 | 版本 |
+|------|------|------|
+| 桌面壳 | Tauri | 2.11 |
+| Python 桥 | pytauri | 0.4 |
+| 前端框架 | Vue 3 + TypeScript | 3.5 |
+| UI 组件库 | Naive UI | 2.44 |
+| 构建工具 | Vite | 8.0 |
+| CSS | UnoCSS | 66.7 |
+| 状态管理 | Pinia | 3.0 |
+| OCR 引擎 | PaddleOCR | 3.4.1 |
+| PDF 处理 | PyMuPDF (fitz) | 1.25+ |
+| Python | CPython | 3.12 |
+| GPU | PaddlePaddle GPU | 3.3.0 (CUDA 12.6) |
+| 包管理 | pixi + pnpm | — |
 
-## 项目结构
+## 项目结构（MVC 架构）
 
 ```
 paddle_pdf/
-├── main.py              # CLI 入口 (argparse)
-├── ocr_engine.py        # OCR 引擎 (GPU/CPU 初始化、PaddleOCR 封装)
-├── pdf_pipeline.py      # PDF 处理流程 (提取页面、OCR、生成输出)
-├── models.py            # 模型注册表 (7 种语言)
-├── check_gpu_env.py     # GPU 环境诊断
-├── pixi.toml            # pixi 环境配置
-├── pixi.lock            # 锁定依赖版本
-├── pyproject.toml       # 项目元数据
-├── run_ocr.bat          # Windows 快捷启动
-├── doc/
-│   ├── developer.md     # 本文档
-│   └── user-guide.md    # 用户使用指南
+├── src/paddle_pdf/           # Python 后端
+│   ├── core/                 #   Model — 纯业务逻辑，无 UI 依赖
+│   │   ├── ocr_engine.py     #     PaddleOCR 引擎封装
+│   │   ├── pdf_pipeline.py   #     PDF 处理管线
+│   │   ├── models.py         #     模型注册表 (7 种语言)
+│   │   └── gpu_utils.py      #     CUDA 检测
+│   ├── service/              #   Service — 编排 core，通过回调上报进度
+│   │   ├── ocr_service.py    #     OCR 任务编排
+│   │   ├── model_service.py  #     模型管理
+│   │   └── system_service.py #     系统诊断
+│   ├── controller/           #   Controller — 协议适配层
+│   │   ├── cli_controller.py #     argparse CLI
+│   │   └── ipc_controller.py #     pytauri IPC 端点 (11 个命令)
+│   ├── common/               #   公共定义
+│   │   ├── schemas.py        #     dataclass 数据结构
+│   │   ├── events.py         #     IPC 事件常量
+│   │   └── config.py         #     全局配置
+│   └── app/                  #   应用入口
+│       ├── cli_app.py        #     CLI 入口
+│       └── pytauri_app.py    #     GUI 入口 (pytauri)
+│
+├── src-frontend/             # Vue 3 前端
+│   ├── src/
+│   │   ├── views/            #     HomeView, TaskDetailView, SettingsView
+│   │   ├── components/       #     FileDropZone, TaskCard, TaskProgress,
+│   │   │                     #     ModelSelector, GpuStatus, TextPanel
+│   │   ├── stores/           #     Pinia: task, settings, app
+│   │   ├── composables/      #     useIpc, useTask, useModels
+│   │   └── types/            #     TypeScript 类型定义
+│   └── src-tauri/            #     Tauri Rust 壳
+│       ├── src/lib.rs        #       pytauri 扩展模块 (pymodule_export)
+│       ├── src/main.rs       #       Python 嵌入入口 (PythonInterpreterBuilder)
+│       └── tauri.conf.json   #       Tauri 配置
+│
+├── doc/                      # 文档
+├── pixi.toml                 # Python + Node 依赖
 └── README.md
 ```
 
-## 环境搭建
+## pytauri 架构详解
 
-```bash
-# 安装所有依赖
-pixi install
+### IPC 通信流程
 
-# 验证
-pixi run python -c "import paddle; print(paddle.__version__)"
-pixi run check-gpu
 ```
+┌─────────────────┐     pyInvoke("cmd", body)     ┌──────────────────┐
+│  Vue Frontend   │ ─────────────────────────────→ │  Tauri Plugin    │
+│  (useIpc.ts)    │                                │  (pyfunc handler)│
+│                 │ ← ─ ─ Emitter.emit(event) ─ ─ ─│                  │
+└─────────────────┘                                └──────────────────┘
+                                                          │
+                                                    invoke_handler
+                                                          ↓
+                                                   ┌──────────────┐
+                                                   │  pytauri      │
+                                                   │  Commands     │
+                                                   │  (Python)     │
+                                                   └──────────────┘
+                                                          │
+                                                          ↓
+                                                   ┌──────────────┐
+                                                   │  Service 层   │
+                                                   │  Core 层      │
+                                                   └──────────────┘
+```
+
+### 关键实现细节
+
+1. **Rust `lib.rs`**：通过 `pytauri::pymodule_export` 创建 Python 扩展模块，导出 `context_factory` 和 `builder_factory`
+2. **Rust `main.rs`**：使用 `PythonInterpreterBuilder` (standalone 模式) 嵌入 Python 解释器，运行入口模块
+3. **Python `pytauri_app.py`**：使用 `Commands` 注册 IPC 命令，通过 `BlockingPortal` 异步处理
+4. **前端 `useIpc.ts`**：使用 `pyInvoke` (来自 `tauri-plugin-pytauri-api`) 而非原生 `invoke`
+5. **pytauri 命令签名**：`async def cmd(body: BaseModel) -> BaseModel | bytes`，`body` 和 `app_handle` 是特殊参数名
+
+### 命令注册规范
+
+```python
+from pytauri import Commands, AppHandle, Emitter
+from pydantic import BaseModel
+
+commands = Commands()
+
+class MyRequest(BaseModel):
+    name: str
+
+class MyResponse(BaseModel):
+    message: str
+
+@commands.command()
+async def my_command(body: MyRequest) -> MyResponse:
+    return MyResponse(message=f"Hello {body.name}")
+
+# 无参数命令用 EmptyBody
+class EmptyBody(BaseModel): pass
+
+@commands.command()
+async def no_args(body: EmptyBody) -> bytes:
+    return b"ok"
+
+# 需要 emit 事件的命令加 app_handle 参数
+@commands.command()
+async def with_progress(body: MyRequest, app_handle: AppHandle) -> MyResponse:
+    Emitter.emit(app_handle, "progress", ProgressPayload(...))
+    return MyResponse(message="done")
+```
+
+### 注意事项
+
+- **不要使用 `from __future__ import annotations`**：pytauri 的 `wrap_pyfunc` 需要运行时类型注解做 `issubclass` 检查
+- **`app_handle` 参数类型必须是 `AppHandle`**：不能用 `Any`
+- **返回 `bytes` 的命令**：前端收到的是原始 bytes，需手动 JSON.parse
+- **`PYTHONPATH` 必须包含 `src/` 目录**：在 pixi.toml 的 tauri tasks 中通过 env 设置
 
 ## PaddleOCR 3.x API 关键差异
 
@@ -53,26 +146,6 @@ pixi run check-gpu
 | `use_gpu=True/False` | **已移除** | 改用 `paddle.device.set_device("gpu:0")` |
 | `show_log=False` | **已移除** | 不再支持 |
 | `use_angle_cls=True` | `use_textline_orientation=True` | 参数改名 |
-
-```python
-# 正确的 PaddleOCR 3.x 初始化
-import paddle
-
-if use_gpu:
-    paddle.device.set_device("gpu:0")
-else:
-    paddle.device.set_device("cpu")
-
-ocr = PaddleOCR(
-    use_textline_orientation=True,
-    lang="ch",
-    text_det_limit_side_len=960,
-    text_det_limit_type="max",
-)
-
-# 调用时不传 cls 参数
-raw_result = ocr.ocr(image_path)
-```
 
 ### 返回结果格式
 
@@ -88,134 +161,59 @@ rec_polys = ocr_result["rec_polys"]     # list[polygon], 每个 polygon = [[x,y]
 
 ### bbox 处理
 
-PaddleOCR 3.x 的 `rec_polys` 是 4 点多边形，不能直接 unpack：
-
 ```python
 import numpy as np
 
 pts = np.array(bbox)         # shape (4, 2)
 x0, y0 = pts.min(axis=0)
 x1, y1 = pts.max(axis=0)
-
-# 注意：不能用 if not bbox (NumPy 布尔判断会报错)
-# 改用 if bbox is None
-```
-
-### 置信度计算
-
-`rec_scores` 是 0-1 小数，百分比转换注意不要重复：
-
-```python
-# ocr_engine.py: 单页平均置信度
-avg_conf = (total_conf / num_lines * 100)  # 已是百分比
-
-# pdf_pipeline.py: 全文统计时
-total_conf_sum += conf * num_lines / 100.0  # conf 已是 %，需转回 0-1
-```
-
-## GPU 初始化模式
-
-```python
-import paddle
-
-# 1. 检测 CUDA 环境 (DLL 路径)
-# 2. 设置设备
-if use_gpu:
-    try:
-        paddle.device.set_device("gpu:0")
-    except Exception:
-        use_gpu = False
-        paddle.device.set_device("cpu")
-
-# 3. 验证 GPU 可用
-def check_gpu():
-    if paddle.device.cuda.device_count() > 0:
-        x = paddle.to_tensor([1.0])
-        _ = x * 2
-        return True
-    return False
 ```
 
 ## PDF 可搜索层写入
 
-使用 PyMuPDF (fitz) 将 OCR 文本以完全透明的模式（`render_mode=3`）精准叠加到原始 PDF 的图像上方，确保用户可以在保留原始图像的外观下进行文字复制、搜索和高亮。
+使用 PyMuPDF (fitz) 将 OCR 文本以完全透明的模式（`render_mode=3`）精准叠加到原始 PDF。
 
-### 核心设计原则
+### 核心算法
 
-1.  **字体预注册与嵌入**：
-    为避免重复加载字体导致 PDF 冗余以及浏览器渲染乱码，在每页处理开始前，自动检测系统 CJK 字体（如 `simsun.ttc`），若不存在则使用 PyMuPDF 内置的 `cjk` 字体包，并通过 `page.insert_font` 进行一次性注册。
-2.  **字号匹配算法（宽度优先，高度截断）**：
-    由于 OCR 识别的 Bbox 宽高比可能与 PDF 标准字体的宽高比存在偏差，如果直接限制字号或采用 `insert_textbox`，会导致文字换行或超出边界。我们先以参考字号 `ref_fs = 10` 测量字体的物理渲染宽度，再按比例缩放，并保证不超过高度的 95%：
-    $$\text{fontsize\_by\_width} = \text{ref\_fs} \times \frac{\text{target\_width}}{\text{measured\_width}}$$
-    $$\text{fontsize} = \max(\min(\text{fontsize\_by\_width}, \text{target\_height} \times 0.95), 1.0)$$
-3.  **基线垂直居中对齐公式**：
-    PyMuPDF 的 `insert_text` 是基于文字基线（Baseline）渲染的。当字号因为宽度限制而缩小后，为了避免文字悬挂在框顶部或沉到底部，我们计算垂直居中偏移量，并根据字体的 `ascender` 属性确定最终的基线 $Y$ 坐标：
-    $$\text{baseline\_y} = \text{ry0} + \frac{\text{target\_height} - \text{fontsize}}{2} + \text{ascender} \times \text{fontsize}$$
+1. **字体预注册与嵌入**：检测系统 CJK 字体，降级使用 PyMuPDF 内置 `cjk` 字体包
+2. **字号匹配（宽度优先，高度截断）**：以参考字号 10pt 测量物理宽度，按比例缩放
+3. **基线垂直居中**：`baseline_y = ry0 + (target_height - fontsize) / 2 + ascender * fontsize`
 
-### 核心实现代码
+## 环境搭建
 
-```python
-# 1. 加载并注册字体
-if font_path:
-    try:
-        font = fitz.Font(fontname="simsun", fontfile=font_path)
-        font_name = "simsun"
-    except Exception:
-        font = fitz.Font("cjk")
-        font_name = "cjk"
-else:
-    font = fitz.Font("cjk")
-    font_name = "cjk"
+```bash
+# 安装所有依赖（含 Node.js、pnpm）
+pixi install
 
-try:
-    if font_path and font_name == "simsun":
-        page.insert_font(fontname=font_name, fontfile=font_path)
-    else:
-        page.insert_font(fontname=font_name, fontbuffer=font.buffer)
-except Exception:
-    # 自动降级处理
-    ...
+# CLI
+pixi run run -- -i "book.pdf"
 
-ascender = getattr(font, "ascender", 0.8)
+# GUI 开发模式
+pixi run tauri-dev
 
-# 2. 逐行精确放置文字
-for line_data in lines:
-    text = line_data.get("text", "").strip()
-    bbox = line_data.get("bbox")
-    
-    # 坐标转换与缩放 (rx0, ry0, rx1, ry1)
-    ...
-    target_width = rx1 - rx0
-    target_height = ry1 - ry0
-    
-    # 动态匹配字号
-    measured_width = font.text_length(text, fontsize=10.0)
-    fs_by_width = 10.0 * target_width / measured_width if measured_width > 0 else target_height
-    fontsize = max(min(fs_by_width, target_height * 0.95), 1.0)
-    
-    # 计算居中基线
-    baseline_y = ry0 + (target_height - fontsize) / 2 + ascender * fontsize
-    point = fitz.Point(rx0, baseline_y)
-    
-    # 写入透明文字层 (render_mode=3)
-    page.insert_text(point, text, fontsize=fontsize, fontname=font_name, render_mode=3)
+# GUI 生产构建
+pixi run tauri-build
+
+# GPU 诊断
+pixi run check-gpu
 ```
 
 ## 常见错误速查
 
-| 错误现象 / 错误信息 | 原因 | 修复方法 |
+| 错误现象 | 原因 | 修复方法 |
 |---|---|---|
-| `Unknown argument: use_gpu` | PaddleOCR 3.x 已删除该参数 | 改用 `paddle.device.set_device()` 设置全局设备。 |
-| `Unknown argument: use_angle_cls` | 参数被重命名 | 改为 `use_textline_orientation=True`。 |
-| `not enough values to unpack bbox` | Bbox 格式不一致 (3.x 返回多边形) | 用 `np.array(bbox)` 提取 `min(axis=0)` 和 `max(axis=0)`。 |
-| `ValueError: if bbox` | NumPy 数组在布尔判断时抛出 | 将判断改为 `if bbox is None:`。 |
-| 置信度转换结果极其夸张 (例如 8329%) | 重复百分比转换 | `total_conf_sum += conf * num_lines / 100.0`（注意 OCR 返回值本身是否带 %）。 |
-| **Edge/Chrome 等浏览器中中文显示为 ??? 乱码** | PDF 未正确嵌入 Unicode 映射表或缺少字体文件 | 使用 `page.insert_font()` 显式传入物理字体文件/字节流 buffer。 |
-| **划词复制/高亮位置严重偏移、换行重叠** | 使用 `insert_textbox` 会因边框舍入导致自动折行 | 改用 `insert_text` 单行写入，并使用宽度匹配字号与基线居中公式。 |
+| `Unknown argument: use_gpu` | PaddleOCR 3.x 已删除该参数 | 改用 `paddle.device.set_device()` |
+| `Unknown argument: use_angle_cls` | 参数被重命名 | 改为 `use_textline_orientation=True` |
+| `not enough values to unpack bbox` | Bbox 是 4 点多边形 | 用 `np.array(bbox)` 提取 min/max |
+| `issubclass() arg 1 must be a class` | 使用了 `from __future__ import annotations` | 删除该导入，使用 Python 3.12 原生注解 |
+| `Command X not found` | 前端用了 `invoke` 而非 `pyInvoke` | 使用 `tauri-plugin-pytauri-api` 的 `pyInvoke` |
+| `pytauri.pyfunc not allowed` | Tauri 权限未配置 | 在 capabilities 中添加 `pytauri:default` |
+| `No module named 'paddle_pdf'` | PYTHONPATH 未设置 | pixi.toml 中 tauri tasks 设置 `PYTHONPATH = "../src"` |
+| PyO3 不支持 Python 3.14 | 系统 Python 版本过新 | 使用 pixi 的 Python 3.12，设置 `PYO3_PYTHON` |
 
 ## 已知限制
 
-- **版面阅读顺序**：复杂的多列、插图排版在纯文本导出（`.txt`）时，识别顺序可能不完全符合人类阅读习惯（受 PaddleOCR 检测框检测顺序影响）。
-- **极小或超大字符**：字号缩放有 `1.0` 的下限限制，极小的干扰噪点可能被放大为 1pt 字体写入。
-- **系统字体依赖**：在 Windows、macOS 和 Linux 上自动搜索常用中文字体，若完全未检测到，将降级使用 PyMuPDF 的内置 `cjk` 字体包（`Droid Sans Fallback`）。
-- **模型管理**：OCR 模型自动缓存于用户家目录的 `~/.paddleocr/` 与 `~/.paddlex/`，如需重置模型可清空该文件夹。
+- **版面阅读顺序**：复杂多列排版在纯文本导出时可能不完全符合阅读顺序
+- **极小或超大字符**：字号缩放下限 1.0pt
+- **系统字体依赖**：自动搜索常用中文字体，降级使用内置 `cjk` 字体包
+- **模型缓存**：`~/.paddleocr/` 和 `~/.paddlex/`

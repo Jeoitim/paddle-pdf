@@ -13,7 +13,7 @@ name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.6.2" }
+tauri-build = { version = "2.6.2", features = [] }
 
 [dependencies]
 serde_json = "1.0"
@@ -23,5 +23,7 @@ tauri = { version = "2.11.2", features = ["devtools"] }
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
-# pytauri — Python bindings for Tauri IPC
-pytauri = "0.4"
+tauri-plugin-pytauri = "0.4"
+# pytauri with standalone feature — embeds Python interpreter
+pytauri = { version = "0.4", features = ["standalone"] }
+pyo3 = "0.23"

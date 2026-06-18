@@ -1,21 +1,27 @@
 /**
- * IPC communication layer — wraps Tauri invoke() and listen().
- * This is the ONLY module that imports from @tauri-apps/api.
+ * IPC communication layer — wraps pytauri's pyInvoke() and Tauri listen().
+ *
+ * pytauri routes ALL IPC through a single "pyfunc" Tauri command.
+ * We must use `pyInvoke` from `tauri-plugin-pytauri-api`, NOT raw `invoke`.
  */
-import { invoke } from '@tauri-apps/api/core'
+import { pyInvoke } from 'tauri-plugin-pytauri-api'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
-/** Call a Python command via pytauri IPC */
+/**
+ * Call a Python command via pytauri IPC.
+ * The `args` object is JSON-serialized and passed as `body` to the Python command.
+ * The Python command receives it as a Pydantic BaseModel.
+ */
 export async function ipcInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
-  return invoke<T>(command, args)
+  return pyInvoke<T>(command, args ?? {})
 }
 
-/** Listen for events emitted by Python backend */
+/** Listen for events emitted by Python backend via Emitter.emit() */
 export function ipcListen<T>(event: string, handler: (payload: T) => void): Promise<UnlistenFn> {
   return listen<T>(event, (e) => handler(e.payload))
 }
 
-/** Listen for Tauri drag-drop events */
+/** Listen for Tauri native drag-drop events */
 export function onDragDrop(handler: (paths: string[]) => void): Promise<UnlistenFn> {
   return listen<{ paths: string[]; position: { x: number; y: number } }>(
     'tauri://drag-drop',
