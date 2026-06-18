@@ -175,9 +175,10 @@ x1, y1 = pts.max(axis=0)
 
 ### 核心算法
 
-1. **字体预注册与嵌入**：检测系统 CJK 字体，降级使用 PyMuPDF 内置 `cjk` 字体包
-2. **字号匹配（宽度优先，高度截断）**：以参考字号 10pt 测量物理宽度，按比例缩放
-3. **基线垂直居中**：`baseline_y = ry0 + (target_height - fontsize) / 2 + ascender * fontsize`
+1. **字体预注册与嵌入**：检测系统 CJK 字体，降级使用 PyMuPDF 内置 `cjk` 字体包。
+2. **字号匹配（宽度优先，高度截断容差）**：优先满足宽度匹配（即 `fs_by_width`），仅在严重超高时截断（允许最大 1.05 倍高度的容差），以保证选中高亮框的宽度与底层图片中文字完全契合。
+3. **自适应字间距（TextWriter 逐字写入）**：使用 `fitz.TextWriter` 逐字符追加，并通过计算差值 `(target_width - text_width) / (n - 1)` 动态分配字间距，保留原始字符间的空格或稀疏排版。
+4. **基线精准定位**：不再居中对齐，而是直接根据字体 Ascender 定位基线：`baseline_y = ry0 + ascender * fontsize`，彻底消除垂直方向的偏移。
 
 ## 环境搭建
 

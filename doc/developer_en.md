@@ -175,9 +175,10 @@ Uses PyMuPDF (fitz) to overlay OCR text onto the original PDF in fully transpare
 
 ### Core Algorithm
 
-1. **Font Pre-registration & Embedding**: Detects system CJK fonts, falls back to PyMuPDF's built-in `cjk` font package
-2. **Font Size Matching (width-first, height-truncated)**: Measures physical width at a 10pt reference size, then scales proportionally
-3. **Baseline Vertical Centering**: `baseline_y = ry0 + (target_height - fontsize) / 2 + ascender * fontsize`
+1. **Font Pre-registration & Embedding**: Detects system CJK fonts, falls back to PyMuPDF's built-in `cjk` font package.
+2. **Font Size Matching (Width-first, Height-truncated Tolerance)**: Prioritizes width-matching (`fs_by_width`), only truncating at a strict height-limit if it exceeds 1.05 times the target height, ensuring the text highlight selection bounding box aligns perfectly with the underlying images.
+3. **Adaptive Character Spacing (TextWriter Single Character Appends)**: Uses `fitz.TextWriter` to append character-by-character, dynamically computing and distributing spacing gap as `(target_width - text_width) / (n - 1)` to keep visual spaces and spacing in multi-word/character structures.
+4. **Precise Baseline Placement**: Removes vertical centering offsets and aligns the text baseline directly based on font ascenders: `baseline_y = ry0 + ascender * fontsize`, completely eliminating line vertical offset/drift.
 
 ## Environment Setup
 
