@@ -20,6 +20,7 @@ export interface OcrOptions {
 
 /** Progress event emitted by Python during processing */
 export interface TaskProgress {
+  task_id: string
   status: TaskStatus
   current_page: number
   total_pages: number

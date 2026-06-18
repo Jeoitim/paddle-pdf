@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { NButton, NSpace, NIcon, NEmpty } from 'naive-ui'
-import { SettingsOutline, MoonOutline, SunnyOutline, TrashOutline, LanguageOutline } from '@vicons/ionicons5'
+import {
+  SettingsOutline,
+  MoonOutline,
+  SunnyOutline,
+  TrashOutline,
+  LanguageOutline,
+} from '@vicons/ionicons5'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useSettingsStore } from '@/stores/settings'
@@ -31,9 +37,12 @@ onMounted(async () => {
   }
 })
 
+/** Submit files to queue — non-blocking, each file enqueued independently. */
 async function onFileSelected(paths: string[]) {
   for (const path of paths) {
-    await startTask(path, { ...settingsStore.options })
+    // Fire-and-forget: startTask submits to queue and returns immediately.
+    // We intentionally do NOT await here so the UI stays responsive.
+    startTask(path, { ...settingsStore.options })
   }
 }
 
@@ -49,18 +58,30 @@ function toggleLocale() {
 <template>
   <div class="page">
     <!-- Header -->
-    <header class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+    <header
+      class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700"
+    >
       <div class="flex items-center gap-3">
         <h1 class="text-xl font-bold">{{ t('app.name') }}</h1>
         <span class="text-xs opacity-40">v{{ appVersion }}</span>
       </div>
       <NSpace>
-        <NButton quaternary circle @click="toggleLocale" :title="locale === 'zh' ? 'English' : '中文'">
+        <NButton
+          quaternary
+          circle
+          @click="toggleLocale"
+          :title="locale === 'zh' ? 'English' : '中文'"
+        >
           <template #icon>
             <NIcon :component="LanguageOutline" />
           </template>
         </NButton>
-        <NButton quaternary circle @click="appStore.toggleDark" :title="appStore.darkMode ? 'Light' : 'Dark'">
+        <NButton
+          quaternary
+          circle
+          @click="appStore.toggleDark"
+          :title="appStore.darkMode ? 'Light' : 'Dark'"
+        >
           <template #icon>
             <NIcon :component="appStore.darkMode ? SunnyOutline : MoonOutline" />
           </template>
@@ -82,38 +103,50 @@ function toggleLocale() {
         <GpuStatus />
       </div>
 
-      <!-- Drop zone -->
-      <FileDropZone
-        :disabled="taskStore.hasActiveTask"
-        @files-selected="onFileSelected"
-      />
+      <!-- Drop zone — always enabled, queue accepts new tasks at any time -->
+      <FileDropZone :disabled="false" @files-selected="onFileSelected" />
 
-      <!-- Active task -->
+      <!-- Running tasks -->
       <div v-if="taskStore.activeTasks.length > 0" class="space-y-3">
         <h2 class="text-lg font-semibold flex items-center gap-2">
           <span class="inline-block w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-          {{ t('home.processing') }}
+          {{ t('home.processing') }} ({{ taskStore.activeTasks.length }})
         </h2>
         <TaskCard
           v-for="task in taskStore.activeTasks"
           :key="task.id"
           :task="task"
-          @cancel="cancelTask"
+          @cancel="cancelTask(task.id)"
           @click="viewTask(task.id)"
         />
       </div>
 
-      <!-- Completed tasks -->
-      <div v-if="taskStore.completedTasks.length > 0" class="space-y-3">
+      <!-- Pending queue -->
+      <div v-if="taskStore.pendingTasks.length > 0" class="space-y-3">
+        <h2 class="text-lg font-semibold flex items-center gap-2">
+          <span class="inline-block w-2 h-2 bg-yellow-500 rounded-full" />
+          {{ t('home.queued') || 'Queue' }} ({{ taskStore.pendingTasks.length }})
+        </h2>
+        <TaskCard
+          v-for="task in taskStore.pendingTasks"
+          :key="task.id"
+          :task="task"
+          @cancel="cancelTask(task.id)"
+          @click="viewTask(task.id)"
+        />
+      </div>
+
+      <!-- Completed / failed / cancelled tasks -->
+      <div v-if="taskStore.finishedTasks.length > 0" class="space-y-3">
         <div class="flex items-center justify-between">
           <h2 class="text-lg font-semibold">{{ t('home.completed') }}</h2>
-          <NButton size="small" quaternary type="error" @click="taskStore.clearCompleted">
+          <NButton size="small" quaternary type="error" @click="taskStore.clearFinished">
             <template #icon><NIcon :component="TrashOutline" /></template>
             {{ t('home.clearAll') }}
           </NButton>
         </div>
         <TaskCard
-          v-for="task in taskStore.completedTasks"
+          v-for="task in taskStore.finishedTasks"
           :key="task.id"
           :task="task"
           @click="viewTask(task.id)"

@@ -1,55 +1,70 @@
 /**
- * Task operations — composable for managing OCR tasks.
+ * Task operations — composable for managing OCR task queue.
+ *
+ * Key changes vs old version:
+ * - ``startTask`` submits to the backend queue and returns immediately (non-blocking).
+ * - A single global progress listener routes events by ``task_id``.
+ * - ``cancelTask`` targets a specific task by ID.
  */
 import { useTaskStore } from '@/stores/task'
 import { ipcInvoke, ipcListen } from './useIpc'
-import type { OcrOptions, TaskProgress, TaskResult } from '@/types'
+import type { OcrOptions, TaskProgress } from '@/types'
+
+let _progressUnlisten: (() => void) | null = null
 
 export function useTask() {
   const store = useTaskStore()
 
-  /** Start processing a file */
-  async function startTask(filePath: string, options: OcrOptions) {
+  /** Ensure the global progress listener is running. */
+  async function ensureProgressListener() {
+    if (_progressUnlisten) return
+    _progressUnlisten = await ipcListen<TaskProgress>('task://progress', (progress) => {
+      store.updateProgress(progress.task_id, progress)
+    })
+  }
+
+  /**
+   * Submit a file to the backend queue.  Returns the frontend task ID
+   * immediately — the actual OCR runs in the background.
+   */
+  async function startTask(filePath: string, options: OcrOptions): Promise<string> {
     const id = store.addTask(filePath, options)
 
-    // Listen for progress events
-    const unlisten = await ipcListen<TaskProgress>('task://progress', (progress) => {
-      store.updateProgress(id, progress)
+    // Make sure the global listener is active
+    await ensureProgressListener()
+
+    // Submit to backend queue (returns instantly)
+    await ipcInvoke('process_task', {
+      task_id: id,
+      input_path: filePath,
+      model_name: options.model_name,
+      use_gpu: options.use_gpu,
+      dpi: options.dpi,
+      max_pages: options.max_pages,
+      angle_cls: options.angle_cls,
+      show_confidence: options.show_confidence,
     })
 
-    try {
-      // pytauri process_task receives body as JSON
-      const res = await ipcInvoke<TaskResult>(
-        'process_task',
-        {
-          input_path: filePath,
-          model_name: options.model_name,
-          use_gpu: options.use_gpu,
-          dpi: options.dpi,
-          max_pages: options.max_pages,
-          angle_cls: options.angle_cls,
-          show_confidence: options.show_confidence,
-        },
-      )
+    return id
+  }
 
-      if (res.success) {
-        store.completeTask(id, res)
-      } else {
-        store.failTask(id, res.error || 'Unknown error')
-      }
-    } catch (e: any) {
-      store.failTask(id, e.toString())
-    } finally {
-      unlisten()
+  /** Cancel a specific task by ID. */
+  async function cancelTask(taskId: string) {
+    store.cancelTask(taskId)
+    try {
+      await ipcInvoke('cancel_task', { task_id: taskId })
+    } catch (e) {
+      console.warn('Cancel failed:', e)
     }
   }
 
-  /** Cancel the active task */
-  async function cancelTask() {
+  /** Remove a finished task from the backend queue store. */
+  async function removeTask(taskId: string) {
+    store.removeTask(taskId)
     try {
-      await ipcInvoke('cancel_task', {})
-    } catch (e) {
-      console.warn('Cancel failed:', e)
+      await ipcInvoke('remove_task', { task_id: taskId })
+    } catch {
+      // ignore — task may already be gone
     }
   }
 
@@ -71,10 +86,5 @@ export function useTask() {
     )
   }
 
-  /** Test IPC round-trip */
-  async function greet(name: string = 'World') {
-    return ipcInvoke<{ message: string }>('greet', { name })
-  }
-
-  return { startTask, cancelTask, openPath, revealInExplorer, getAppInfo, greet }
+  return { startTask, cancelTask, removeTask, openPath, revealInExplorer, getAppInfo }
 }

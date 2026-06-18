@@ -13,6 +13,7 @@ export default {
     dropZoneActive: 'Release to add PDF',
     dropZoneHint: 'Supports .pdf files · Multiple files allowed',
     processing: 'Processing',
+    queued: 'Queued',
     completed: 'Completed',
     clearAll: 'Clear all',
     empty: 'No tasks yet. Drop a PDF file above to get started.',

@@ -13,6 +13,7 @@ export default {
     dropZoneActive: '释放以添加 PDF',
     dropZoneHint: '支持 .pdf 文件 · 可批量处理',
     processing: '处理中',
+    queued: '队列中',
     completed: '已完成',
     clearAll: '全部清除',
     empty: '暂无任务。拖放 PDF 文件到上方即可开始。',

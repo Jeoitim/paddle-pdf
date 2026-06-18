@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { NIcon, NButton, NTag } from 'naive-ui'
-import { CloseCircleOutline, CheckmarkCircleOutline, AlertCircleOutline, TimeOutline } from '@vicons/ionicons5'
+import { NIcon, NButton, NTag, NSpin } from 'naive-ui'
+import { CloseCircleOutline, CheckmarkCircleOutline, AlertCircleOutline, TimeOutline, SyncOutline } from '@vicons/ionicons5'
 import TaskProgress from './TaskProgress.vue'
 import type { Task } from '@/types'
 import { computed } from 'vue'
@@ -13,13 +13,16 @@ const emit = defineEmits<{ cancel: []; click: [] }>()
 const statusConfig = computed(() => {
   switch (props.task.status) {
     case 'completed':
-      return { color: 'success', icon: CheckmarkCircleOutline, label: t('task.completed') }
+      return { color: 'success', icon: CheckmarkCircleOutline, label: t('task.completed'), spinning: false }
     case 'failed':
-      return { color: 'error', icon: AlertCircleOutline, label: t('task.failed') }
+      return { color: 'error', icon: AlertCircleOutline, label: t('task.failed'), spinning: false }
     case 'cancelled':
-      return { color: 'warning', icon: CloseCircleOutline, label: t('task.cancelled') }
+      return { color: 'warning', icon: CloseCircleOutline, label: t('task.cancelled'), spinning: false }
+    case 'pending':
+      return { color: 'default', icon: TimeOutline, label: t('task.pending'), spinning: false }
     default:
-      return { color: 'info', icon: TimeOutline, label: t('task.pending') }
+      // extracting, ocr_running, saving
+      return { color: 'info', icon: SyncOutline, label: t(`task.${props.task.status}`) || props.task.status, spinning: true }
   }
 })
 
@@ -37,7 +40,7 @@ const elapsedText = computed(() => {
   >
     <div class="flex items-center justify-between mb-2">
       <div class="flex items-center gap-2 min-w-0">
-        <NIcon :component="statusConfig.icon" :size="20" />
+        <NIcon :component="statusConfig.icon" :size="20" :class="{ 'animate-spin': statusConfig.spinning }" />
         <span class="font-medium truncate">{{ task.fileName }}</span>
       </div>
       <div class="flex items-center gap-2">
@@ -56,6 +59,10 @@ const elapsedText = computed(() => {
     </div>
 
     <TaskProgress v-if="task.progress" :progress="task.progress" />
+
+    <div v-if="task.status === 'pending'" class="text-xs opacity-60 mt-1">
+      {{ task.options.model_name }} · {{ task.options.dpi }} DPI{{ task.options.use_gpu ? ' · GPU' : '' }}
+    </div>
 
     <div v-if="task.result" class="text-sm opacity-70 mt-1">
       {{ t('task.pages', { n: task.result.total_pages }) }} ·

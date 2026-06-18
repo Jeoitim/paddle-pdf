@@ -6,6 +6,7 @@ Commands use pytauri's Commands API:
   - Must be async and must not block
 """
 
+import json
 import os
 import platform
 from dataclasses import asdict
@@ -19,8 +20,8 @@ from ..common.config import APP_NAME, APP_VERSION
 from ..common.events import Events
 from ..common.schemas import OcrOptions, TaskProgress
 from ..service.model_service import ModelService
-from ..service.ocr_service import OcrService
 from ..service.system_service import SystemService
+from ..service.task_queue import TaskQueue
 
 
 # ── Request / Response Models ──────────────────────────────────
@@ -43,6 +44,7 @@ class AppInfoResponse(BaseModel):
     arch: str
 
 class ProcessTaskRequest(BaseModel):
+    task_id: str
     input_path: str
     model_name: str = "ch"
     use_gpu: bool = False
@@ -63,11 +65,15 @@ class TaskResultResponse(BaseModel):
     error: Optional[str] = None
 
 class TaskProgressPayload(BaseModel):
+    task_id: str
     status: str
     current_page: int = 0
     total_pages: int = 0
     message: str = ""
     elapsed: float = 0.0
+
+class CancelTaskRequest(BaseModel):
+    task_id: str
 
 class DownloadModelRequest(BaseModel):
     name: str
@@ -96,7 +102,7 @@ class SimpleResponse(BaseModel):
 
 _model_svc = ModelService()
 _system_svc = SystemService()
-_active_service: OcrService | None = None
+_task_queue = TaskQueue(max_workers=1)
 
 
 # ── Command Registration ───────────────────────────────────────
@@ -123,25 +129,16 @@ def register_commands_pytauri(commands: Any) -> None:
         return APP_VERSION.encode()
 
     @commands.command()
-    async def process_task(body: ProcessTaskRequest, app_handle: AppHandle) -> TaskResultResponse:
-        global _active_service
-        _active_service = OcrService()
+    async def process_task(body: ProcessTaskRequest, app_handle: AppHandle) -> SimpleResponse:
+        """Submit a task to the background queue.  Returns immediately."""
 
-        opts = OcrOptions(
-            model_name=body.model_name,
-            use_gpu=body.use_gpu,
-            dpi=body.dpi,
-            max_pages=body.max_pages,
-            angle_cls=body.angle_cls,
-            show_confidence=body.show_confidence,
-        )
-
-        def _on_progress(tp: TaskProgress):
+        def _on_progress(task_id: str, tp: TaskProgress) -> None:
             try:
                 Emitter.emit(
                     app_handle,
                     Events.TASK_PROGRESS,
                     TaskProgressPayload(
+                        task_id=task_id,
                         status=tp.status.value,
                         current_page=tp.current_page,
                         total_pages=tp.total_pages,
@@ -152,40 +149,40 @@ def register_commands_pytauri(commands: Any) -> None:
             except Exception:
                 pass
 
-        try:
-            result = _active_service.process_pdf(
-                input_path=Path(body.input_path),
-                options=opts,
-                progress_callback=_on_progress,
-            )
-            resp = TaskResultResponse(
-                success=True,
-                input_path=str(result.input_path),
-                output_pdf_path=str(result.output_pdf_path) if result.output_pdf_path else None,
-                output_txt_path=str(result.output_txt_path) if result.output_txt_path else None,
-                total_pages=result.total_pages,
-                total_lines=result.total_lines,
-                avg_confidence=result.avg_confidence,
-                elapsed_seconds=result.elapsed_seconds,
-            )
-            return resp
-        except InterruptedError:
-            return TaskResultResponse(success=False, error="Cancelled by user")
-        except Exception as e:
-            return TaskResultResponse(success=False, error=str(e))
-        finally:
-            _active_service = None
+        # Wire up the progress callback (idempotent — safe to call repeatedly)
+        _task_queue.set_progress_callback(_on_progress)
+
+        opts = OcrOptions(
+            model_name=body.model_name,
+            use_gpu=body.use_gpu,
+            dpi=body.dpi,
+            max_pages=body.max_pages,
+            angle_cls=body.angle_cls,
+            show_confidence=body.show_confidence,
+        )
+        _task_queue.add_task(body.task_id, Path(body.input_path), opts)
+
+        # Return immediately — task runs in background
+        return SimpleResponse(success=True)
 
     @commands.command()
-    async def cancel_task(body: EmptyBody) -> SimpleResponse:
-        if _active_service:
-            _active_service.cancel()
-            return SimpleResponse(success=True)
-        return SimpleResponse(success=False, error="No active task")
+    async def cancel_task(body: CancelTaskRequest) -> SimpleResponse:
+        ok = _task_queue.cancel_task(body.task_id)
+        return SimpleResponse(success=ok)
+
+    @commands.command()
+    async def get_queue_status(body: EmptyBody) -> bytes:
+        """Return JSON array of all task statuses."""
+        return json.dumps(_task_queue.get_status()).encode()
+
+    @commands.command()
+    async def remove_task(body: CancelTaskRequest) -> SimpleResponse:
+        """Remove a finished task from the queue store."""
+        ok = _task_queue.remove_task(body.task_id)
+        return SimpleResponse(success=ok)
 
     @commands.command()
     async def list_models(body: EmptyBody) -> bytes:
-        import json
         models = [asdict(m) for m in _model_svc.list_models()]
         return json.dumps(models).encode()
 
@@ -207,7 +204,6 @@ def register_commands_pytauri(commands: Any) -> None:
 
     @commands.command()
     async def diagnose_system(body: EmptyBody) -> bytes:
-        import json
         return json.dumps(_system_svc.diagnose()).encode()
 
     @commands.command()
