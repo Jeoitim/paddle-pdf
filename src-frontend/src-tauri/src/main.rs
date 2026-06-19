@@ -7,7 +7,6 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use tauri::{AppHandle, Manager, State};
-use tauri::Emitter;
 
 /// Shared state: the HTTP port the Python backend is listening on.
 struct BackendState {

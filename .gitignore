@@ -33,5 +33,9 @@ Thumbs.db
 check_env.txt
 
 # PyInstaller backend build artifacts (large, rebuilt from pixi env)
+# Keep the placeholder README but ignore all actual binary content
 backend/build/
-backend/dist/
+backend/dist/paddle_pdf_backend/*.exe
+backend/dist/paddle_pdf_backend/*.dll
+backend/dist/paddle_pdf_backend/*.pyd
+backend/dist/paddle_pdf_backend/_internal/
