@@ -33,3 +33,8 @@ Thumbs.db
 # Logs
 *.log
 check_env.txt
+
+# Tauri embedded Python environment
+src-frontend/src-tauri/pyembed/*
+!src-frontend/src-tauri/pyembed/.gitkeep
+
