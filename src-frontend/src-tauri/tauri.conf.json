@@ -31,9 +31,7 @@
     "active": true,
     "targets": ["nsis"],
     "resources": {
-      "pyembed/**/*": "pyembed/",
-      "pyembed/python312.dll": "../python312.dll",
-      "pyembed/python3.dll": "../python3.dll"
+      "backend/dist/paddle_pdf_backend/**/*": "paddle_pdf_backend/"
     },
     "icon": [
       "icons/32x32.png",
@@ -45,7 +43,8 @@
     "windows": {
       "nsis": {
         "installerIcon": "icons/icon.ico",
-        "displayLanguageSelector": true
+        "displayLanguageSelector": true,
+        "compression": "lzma"
       },
       "wix": null
     },

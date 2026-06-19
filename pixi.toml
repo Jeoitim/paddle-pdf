@@ -1,7 +1,7 @@
 [workspace]
 name = "paddle-pdf"
 version = "1.0.0"
-description = "PDF OCR tool with GUI (pytauri) powered by PaddleOCR"
+description = "PDF OCR tool with GUI powered by PaddleOCR"
 channels = ["conda-forge"]
 platforms = ["win-64"]
 
@@ -21,36 +21,39 @@ paddlepaddle-gpu = "==3.3.0"
 paddleocr = "==3.4.1"
 pymupdf = ">=1.25.0"
 pdf2image = ">=1.17.0"
-pytauri = ">=0.4"
 anyio = ">=4"
-
-[feature.gui]
-pypi-dependencies = { pytauri = ">=0.4", anyio = ">=4" }
+# HTTP server (replaces pytauri IPC)
+fastapi = ">=0.115"
+uvicorn = { version = ">=0.30", extras = ["standard"] }
+# Packaging
+pyinstaller = ">=6.0"
 
 [feature.dev]
 dependencies = { black = ">=24.0", ruff = ">=0.4.0" }
 
 [environments]
 default = { solve-group = "default" }
-gui = { features = ["gui"], solve-group = "default" }
 dev = { features = ["dev"], solve-group = "default" }
 
 [tasks]
-# CLI (PYTHONPATH=src ensures paddle_pdf is importable from source tree)
+# CLI
 run = { cmd = "python -m paddle_pdf", env = { PYTHONPATH = "src" } }
 run-gpu = { cmd = "python -m paddle_pdf -gpu", env = { PYTHONPATH = "src" } }
 check-gpu = { cmd = "python -m paddle_pdf --diagnose", env = { PYTHONPATH = "src" } }
 
-# Frontend (run from src-frontend/)
+# Frontend
 frontend-install = { cmd = "pnpm install", cwd = "src-frontend" }
 frontend-dev = { cmd = "pnpm dev", cwd = "src-frontend" }
 frontend-build = { cmd = "pnpm build", cwd = "src-frontend" }
 
-# Tauri (requires Rust toolchain)
-# PYO3_PYTHON: points Cargo to pixi's Python 3.12
-# PYTHONPATH:  ensures the embedded Python can find paddle_pdf package
-tauri-dev = { cmd = "pnpm tauri dev", cwd = "src-frontend", env = { PYO3_PYTHON = "python", PYTHONPATH = "../src" } }
-tauri-build = { cmd = "pnpm tauri build", cwd = "src-frontend", env = { PYO3_PYTHON = "python", PYTHONPATH = "../src" } }
+# Tauri dev — Python backend runs separately, Tauri just launches the Webview
+# In dev mode, start the backend manually first: pixi run backend-dev
+tauri-dev = { cmd = "pnpm tauri dev", cwd = "src-frontend" }
+tauri-build = { cmd = "pnpm tauri build", cwd = "src-frontend" }
+
+# Backend
+backend-dev = { cmd = "python -m paddle_pdf.app.http_server", env = { PYTHONPATH = "src" } }
+build-backend = { cmd = "pyinstaller backend/paddle_pdf_backend.spec --distpath backend/dist --workpath backend/build", env = { PYTHONPATH = "src" } }
 
 # Dev tools
 lint = "ruff check ."
