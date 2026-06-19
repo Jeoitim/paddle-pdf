@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
 
-SRC = str(Path(SPECPATH).parent.parent / "src")
+SRC = str(Path(SPECPATH).parent / "src")
 
 hiddenimports = [
     "uvicorn.logging","uvicorn.loops","uvicorn.loops.auto",
