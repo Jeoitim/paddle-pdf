@@ -2,55 +2,39 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use tauri::{AppHandle, Manager, State};
+use tauri::{Manager, State};
 
 /// Shared state: the HTTP port the Python backend is listening on.
 struct BackendState {
     port: Arc<Mutex<Option<u16>>>,
 }
 
-fn find_backend_exe(app: &AppHandle) -> PathBuf {
-    // In production: sidecar is in resources/paddle_pdf_backend/paddle_pdf_backend.exe
-    // In development: use the pixi environment to run http_server.py directly via a wrapper
-    if cfg!(debug_assertions) {
-        // Development: expect the binary to be next to us, built via
-        //   pixi run pyinstaller backend/paddle_pdf_backend.spec
-        // OR fall back to running the module directly (set PADDLE_PDF_DEV=1)
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let project_root = std::path::Path::new(manifest_dir)
-            .parent().unwrap()  // src-frontend
-            .parent().unwrap(); // project root
-        let dev_backend = project_root
-            .join("backend")
-            .join("dist")
-            .join("paddle_pdf_backend")
-            .join("paddle_pdf_backend.exe");
-        if dev_backend.exists() {
-            return dev_backend;
-        }
-        // Absolute fallback: caller should handle None
-        dev_backend
-    } else {
-        // Production: Tauri resolves the sidecar from resources
-        app.path()
-            .resource_dir()
-            .unwrap()
-            .join("paddle_pdf_backend")
-            .join("paddle_pdf_backend.exe")
-    }
-}
-
-fn spawn_backend(backend_exe: PathBuf, port_state: Arc<Mutex<Option<u16>>>) {
+fn spawn_backend(mut cmd: std::process::Command, port_state: Arc<Mutex<Option<u16>>>) {
     std::thread::spawn(move || {
-        let mut child = std::process::Command::new(&backend_exe)
+        #[cfg(target_os = "windows")]
+        {
+            // CREATE_NO_WINDOW = 0x08000000
+            // Hide the console window of the spawned backend process on Windows in release
+            if !cfg!(debug_assertions) {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x08000000);
+            }
+        }
+
+        let mut child = match cmd
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::inherit())
             .spawn()
-            .expect("Failed to spawn Python backend");
+        {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("[tauri] ERROR: Failed to spawn Python backend: {:?}", e);
+                return;
+            }
+        };
 
         let stdout = child.stdout.take().expect("No stdout from backend");
         let mut reader = BufReader::new(stdout);
@@ -86,15 +70,56 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .manage(BackendState { port: port_state })
         .setup(move |app| {
-            let backend_exe = find_backend_exe(app.handle());
-            if !backend_exe.exists() {
-                eprintln!(
-                    "[tauri] WARNING: Backend executable not found at {:?}\n\
-                     Run: pixi run pyinstaller backend/paddle_pdf_backend.spec",
-                    backend_exe
-                );
+            let port_state_clone = port_state_clone.clone();
+            let mut cmd;
+
+            if cfg!(debug_assertions) {
+                let manifest_dir = env!("CARGO_MANIFEST_DIR");
+                let project_root = std::path::Path::new(manifest_dir)
+                    .parent().unwrap()  // src-frontend
+                    .parent().unwrap(); // project root
+                let dev_backend = project_root
+                    .join("backend")
+                    .join("dist")
+                    .join("paddle_pdf_backend")
+                    .join("paddle_pdf_backend.exe");
+
+                if dev_backend.exists() {
+                    eprintln!("[tauri] Spawning compiled dev backend: {:?}", dev_backend);
+                    cmd = std::process::Command::new(dev_backend);
+                } else {
+                    // Fall back to running python in the pixi environment
+                    let python_exe = project_root
+                        .join(".pixi")
+                        .join("envs")
+                        .join("default")
+                        .join("Scripts")
+                        .join("python.exe");
+
+                    if python_exe.exists() {
+                        eprintln!("[tauri] Backend exe not found. Spawning python backend from pixi environment: {:?}", python_exe);
+                        cmd = std::process::Command::new(&python_exe);
+                        cmd.args(["-m", "paddle_pdf.app.http_server"]);
+                        cmd.env("PYTHONPATH", project_root.join("src"));
+                    } else {
+                        eprintln!("[tauri] Backend exe not found. Fallback: spawning system python backend");
+                        cmd = std::process::Command::new("python");
+                        cmd.args(["-m", "paddle_pdf.app.http_server"]);
+                        cmd.env("PYTHONPATH", project_root.join("src"));
+                    }
+                }
+            } else {
+                // Production: Tauri resolves the sidecar from resources
+                let backend_exe = app.path()
+                    .resource_dir()
+                    .unwrap()
+                    .join("paddle_pdf_backend")
+                    .join("paddle_pdf_backend.exe");
+                eprintln!("[tauri] Spawning production backend sidecar: {:?}", backend_exe);
+                cmd = std::process::Command::new(backend_exe);
             }
-            spawn_backend(backend_exe, port_state_clone);
+
+            spawn_backend(cmd, port_state_clone);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![get_backend_port])

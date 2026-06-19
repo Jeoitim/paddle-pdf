@@ -46,6 +46,7 @@ if str(_base) not in sys.path:
 
 # -- App & Services ------------------------------------------------------------
 from paddle_pdf.common.config import APP_NAME, APP_VERSION
+from paddle_pdf.common.events import Events
 from paddle_pdf.common.schemas import OcrOptions
 from paddle_pdf.service.model_service import ModelService
 from paddle_pdf.service.system_service import SystemService
@@ -83,7 +84,7 @@ def _push_event(event_type: str, data: Any) -> None:
 
 
 def _on_progress(task_id: str, tp) -> None:
-    _push_event("task_progress", {
+    _push_event(Events.TASK_PROGRESS, {
         "task_id": task_id, "status": tp.status.value,
         "current_page": tp.current_page, "total_pages": tp.total_pages,
         "message": tp.message, "elapsed": tp.elapsed,
@@ -91,7 +92,7 @@ def _on_progress(task_id: str, tp) -> None:
 
 
 def _on_completed(task_id: str, result) -> None:
-    _push_event("task_completed", {
+    _push_event(Events.TASK_COMPLETED, {
         "task_id": task_id, "success": True,
         "input_path": str(result.input_path),
         "output_pdf_path": str(result.output_pdf_path) if result.output_pdf_path else "",
@@ -102,11 +103,11 @@ def _on_completed(task_id: str, result) -> None:
 
 
 def _on_failed(task_id: str, error: str) -> None:
-    _push_event("task_failed", {"task_id": task_id, "success": False, "error": error})
+    _push_event(Events.TASK_FAILED, {"task_id": task_id, "success": False, "error": error})
 
 
 def _on_cancelled(task_id: str) -> None:
-    _push_event("task_cancelled", {"task_id": task_id, "success": False, "error": "Cancelled by user"})
+    _push_event(Events.TASK_CANCELLED, {"task_id": task_id, "success": False, "error": "Cancelled by user"})
 
 
 _task_queue.set_progress_callback(_on_progress)
