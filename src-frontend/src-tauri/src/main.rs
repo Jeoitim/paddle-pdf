@@ -2,7 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::borrow::Cow;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use pyo3::wrap_pymodule;
 use pytauri::standalone::{PythonInterpreterBuilder, PythonInterpreterEnv, PythonScript};
