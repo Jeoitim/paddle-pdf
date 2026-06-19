@@ -11,8 +11,74 @@ logger = logging.getLogger(__name__)
 
 # Legacy cache location
 LEGACY_CACHE_ROOT = Path.home() / ".paddleocr" / "ocr"
-# PaddleOCR 3.x / paddlex cache location
-PADDLEX_CACHE_ROOT = Path.home() / ".paddlex" / "official_models"
+
+# PaddleOCR 3.x / paddlex cache location helpers
+def get_paddlex_cache_root() -> Path:
+    """Get the active paddlex cache root directory.
+    
+    Checks PADDLE_PDX_CACHE_HOME or PADDLEX_HOME environment variable first, falling back to ~/.paddlex.
+    """
+    paddlex_home = os.environ.get("PADDLE_PDX_CACHE_HOME") or os.environ.get("PADDLEX_HOME")
+    if paddlex_home:
+        return Path(paddlex_home) / "official_models"
+    return Path.home() / ".paddlex" / "official_models"
+
+
+def setup_paddlex_fallback() -> None:
+    """Redirect PaddleX and PaddleHub cache directories to fallback locations."""
+    fallback_paddlex = Path.home() / ".paddlex_fallback"
+    fallback_hub = Path.home() / ".paddle_hub_fallback"
+    
+    os.environ["PADDLEX_HOME"] = str(fallback_paddlex)
+    os.environ["PADDLE_PDX_CACHE_HOME"] = str(fallback_paddlex)
+    os.environ["PADDLE_HUB_HOME"] = str(fallback_hub)
+    
+    logger.warning(
+        f"Redirecting PaddleX cache to: {fallback_paddlex} and PaddleHub cache to: {fallback_hub}"
+    )
+
+
+def check_and_apply_fallback(name: str) -> None:
+    """Check if the default paddlex cache directories for the given model have permission issues.
+    
+    If a permission issue is detected, redirects to fallback cache locations.
+    """
+    # If the environment variable was already explicitly set (or fallback already active), do nothing
+    if "PADDLE_PDX_CACHE_HOME" in os.environ or "PADDLEX_HOME" in os.environ:
+        return
+
+    paddlex_root = Path.home() / ".paddlex" / "official_models"
+    if not paddlex_root.exists():
+        return
+
+    # Check the general root directory readability
+    try:
+        list(paddlex_root.iterdir())
+    except PermissionError:
+        logger.warning(
+            f"Permission denied accessing PaddleX official models directory: {paddlex_root}. "
+            "Enabling fallback directory..."
+        )
+        setup_paddlex_fallback()
+        return
+
+    # Check specific model expected subdirectories
+    expected_dirs = _PADDLEX_DIRS.get(name, [])
+    for d in expected_dirs:
+        if not d:
+            continue
+        path = paddlex_root / d
+        if path.exists():
+            try:
+                # Try listing/accessing the directory to verify read permission
+                list(path.iterdir())
+            except PermissionError:
+                logger.warning(
+                    f"Permission denied accessing PaddleX model subdirectory: {path}. "
+                    "Enabling fallback directory..."
+                )
+                setup_paddlex_fallback()
+                return
 
 MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     "ch": {
@@ -163,6 +229,9 @@ def is_model_cached(name: str) -> bool:
     if name not in MODEL_REGISTRY:
         return False
 
+    # Check for permissions issue and apply fallback if needed
+    check_and_apply_fallback(name)
+
     # Check legacy location
     legacy_dir = LEGACY_CACHE_ROOT / name
     if legacy_dir.exists():
@@ -174,12 +243,13 @@ def is_model_cached(name: str) -> bool:
             logger.warning("Permission denied scanning legacy cache: %s", legacy_dir)
 
     # Check paddlex location (PaddleOCR 3.x)
-    if PADDLEX_CACHE_ROOT.exists():
+    paddlex_cache_root = get_paddlex_cache_root()
+    if paddlex_cache_root.exists():
         # Check model-specific directories
         expected_dirs = _PADDLEX_DIRS.get(name, [])
         if expected_dirs:
             all_present = all(
-                _dir_has_files(PADDLEX_CACHE_ROOT / d)
+                _dir_has_files(paddlex_cache_root / d)
                 for d in expected_dirs
                 if d  # skip empty strings
             )
@@ -199,12 +269,12 @@ def is_model_cached(name: str) -> bool:
             prefix = prefix_map.get(lang, "")
             if prefix:
                 try:
-                    for d in PADDLEX_CACHE_ROOT.iterdir():
+                    for d in paddlex_cache_root.iterdir():
                         if d.is_dir() and d.name.startswith(prefix):
                             if _dir_has_files(d):
                                 return True
                 except PermissionError:
-                    logger.warning("Permission denied scanning paddlex cache: %s", PADDLEX_CACHE_ROOT)
+                    logger.warning("Permission denied scanning paddlex cache: %s", paddlex_cache_root)
 
     return False
 
@@ -214,6 +284,8 @@ def download_model(name: str, force: bool = False) -> bool:
     if name not in MODEL_REGISTRY:
         logger.error(f"Unknown model: '{name}'")
         return False
+
+    check_and_apply_fallback(name)
 
     info = get_model_info(name)
     logger.info(f"Model: {name} - {info['desc']}")

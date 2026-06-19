@@ -140,9 +140,12 @@ class PaddleOCREngine:
         return False
 
     def initialize(self) -> PaddleOCREngine:
-        """Initialize the OCR engine (lazy)."""
         if self._initialized:
             return self
+
+        # Resolve permission issues on paddlex directories dynamically
+        from paddle_pdf.core.models import check_and_apply_fallback
+        check_and_apply_fallback(self.model_name)
 
         from paddleocr import PaddleOCR
         import paddle
