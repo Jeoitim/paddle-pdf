@@ -182,11 +182,39 @@ The GUI supports a task queue that lets you add multiple PDF files consecutively
 
 ### Requirements
 
-| Component | Description |
-|---|---|
-| NVIDIA GPU | RTX 3060+ (6GB+) recommended |
-| CUDA Toolkit | 11.x or 12.x |
-| cuDNN | Must be installed separately |
+| Component | Description | Recommended/Required Version |
+|---|---|---|
+| NVIDIA GPU | RTX 3060+ (6GB+) recommended | CUDA Cores enabled |
+| NVIDIA Driver | Needed to support CUDA 12.x | [Driver Downloads](https://www.nvidia.com/Download/index.aspx) |
+| CUDA Toolkit | Core runtime library (Paddle is compiled with **CUDA 12.6**) | **12.6** (or 12.x compatible)<br>[CUDA Toolkit Archive](https://developer.nvidia.com/cuda-toolkit-archive) |
+| cuDNN | Deep learning acceleration library, merged into CUDA path | **v9.x** (or v8.x matching CUDA 12.x)<br>[cuDNN Downloads](https://developer.nvidia.com/cudnn) |
+
+### NVIDIA Toolchain Installation Guide
+
+#### 1. Install/Update Graphics Driver
+1. Visit the [NVIDIA Driver Downloads site](https://www.nvidia.com/Download/index.aspx).
+2. Choose your GPU model, download the latest driver, and run the installation.
+
+#### 2. Install CUDA Toolkit (e.g., CUDA 12.6)
+1. Go to the [CUDA 12.6 Download Page](https://developer.nvidia.com/cuda-12-6-0-download-archive) (or select 12.6 from the [CUDA Toolkit Archive](https://developer.nvidia.com/cuda-toolkit-archive)).
+2. Select your OS platform (Windows -> x86_64 -> 10 or 11 -> exe (local)) and click download.
+3. Run the installer and choose "Express installation (Recommended)". The installer will set the `CUDA_PATH` environment variable and append the binary path to your system's `Path` (typically installed at `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6`).
+
+#### 3. Install cuDNN Library
+PaddleOCR requires cuDNN to achieve hardware acceleration on NVIDIA GPUs:
+1. Visit the [NVIDIA cuDNN page](https://developer.nvidia.com/cudnn). Sign in or register for a free developer account if required.
+2. Download the cuDNN zip archive matching your CUDA version (e.g. cuDNN for CUDA 12.x, Windows (x64) zip package).
+3. Extract the downloaded zip. Inside, you will see `bin/`, `include/`, and `lib/` folders.
+4. Copy **all files** from these folders and paste (merge) them into the corresponding directories of your CUDA Toolkit installation path (e.g. `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6\`).
+   *If prompted to overwrite existing files, select Yes.*
+
+#### 4. Verify Environmental Paths
+1. Open terminal (or PowerShell/cmd) and type the following command to check if the CUDA compiler is available:
+   ```bash
+   nvcc -V
+   ```
+   It should output `release 12.6`.
+2. Make sure `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6\bin` is present in your system's environment `Path` variable.
 
 ### Verify GPU
 
@@ -196,12 +224,10 @@ pixi run check-gpu
 
 ### Common GPU Issues
 
-**GPU detection returns 0**: Check that CUDA Toolkit and cuDNN are correctly installed.
-
-**cuDNN not installed**:
-1. Visit https://developer.nvidia.com/cudnn to download
-2. Extract to the CUDA installation directory (merge bin/, include/, lib/)
-3. Restart the terminal
+**GPU detection returns 0**:
+1. Check `nvcc -V` output to verify CUDA compiler presence and system `Path` configuration.
+2. Verify that cuDNN library files (such as `cudnn64_*.dll` or `cudnn_ops_infer64_*.dll`) were successfully copied into the `bin/` subfolder of your CUDA installation path.
+3. Restart your computer to ensure newly configured environment variables are applied.
 
 ## Performance Reference
 
