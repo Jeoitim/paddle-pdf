@@ -16,10 +16,7 @@ fn main() -> std::process::ExitCode {
     let resource_dir = exe_dir.join("resources");
     let standalone_pyembed = resource_dir.join("pyembed");
 
-    let (env, is_standalone) = if standalone_pyembed.exists() {
-        // Production: Use the bundled standalone Python runtime environment
-        (PythonInterpreterEnv::Standalone(Cow::Owned(standalone_pyembed)), true)
-    } else {
+    let (env, is_standalone) = if cfg!(debug_assertions) {
         // Development fallback: Use the VIRTUAL_ENV or local .pixi default virtual environment
         let venv_root = std::env::var("VIRTUAL_ENV")
             .or_else(|_| {
@@ -38,6 +35,9 @@ fn main() -> std::process::ExitCode {
             })
             .expect("Python environment not found. Set VIRTUAL_ENV, extract to pyembed, or run via `pixi run tauri-dev`");
         (PythonInterpreterEnv::Venv(Cow::Owned(Path::new(&venv_root).to_path_buf())), false)
+    } else {
+        // Production: Use the bundled standalone Python runtime environment
+        (PythonInterpreterEnv::Standalone(Cow::Owned(standalone_pyembed)), true)
     };
 
     // 2. Only inject PYTHONPATH in development mode to support source code hot-reloading
