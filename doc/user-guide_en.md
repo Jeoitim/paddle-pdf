@@ -12,14 +12,32 @@ If the source file quality is mediocre, a smaller model is used, or CUDA acceler
 
 ## Quick Start
 
-### Installation
+We provide two separate installation and usage routes for different types of users:
 
-```bash
-# After cloning the project, install dependencies
-pixi install
-```
+### Installation Guide
+
+#### 1. For General Users (Recommended, One-Click Installation)
+General users **do not** need to install Git, Python, Node.js, Pixi, or C++ compiler environments:
+1. Go to the [Releases page](https://github.com/Jeoitim/paddle_pdf/releases) and download the latest pre-packaged installer (e.g., `PaddlePDF_1.0.0_x64-setup.exe`).
+2. Double-click the installer and follow the instructions to complete setup. Once installed, you can launch the graphical user interface (GUI) from your desktop shortcut.
+
+#### 2. For Developers (Local Source & Development)
+If you wish to run from source and debug locally, configure your environment as follows:
+- Ensure the [Pixi](https://pixi.sh) package manager and the [pnpm](https://pnpm.io) package manager are installed.
+- Run the following commands in the project root directory:
+  ```bash
+  # Automatically pull Python runtime and OCR packages
+  pixi install
+
+  # Install frontend Vue and Tauri Node.js dependencies
+  pixi run frontend-install
+  ```
+
+---
 
 ### Basic Usage
+
+#### Development Environment (Pixi)
 
 ```bash
 # CPU mode
@@ -32,6 +50,32 @@ pixi run run-gpu -- -i "book.pdf"
 run_ocr.bat -i "book.pdf"
 run_ocr.bat -gpu -i "book.pdf"
 ```
+
+#### Production Environment (Packaged Version)
+
+After compiling/installing, the backend engine `paddle_pdf_backend.exe` is fully compiled and runs independently of local Python environment dependencies. You can use it directly as a standalone CLI tool in your terminal (PowerShell or CMD):
+
+1. **Executable Path**:
+   - Installed path: `C:\Users\<Username>\AppData\Local\PaddlePDF\resources\paddle_pdf_backend\paddle_pdf_backend.exe`
+   - Or in the compiled build folder: `resources\paddle_pdf_backend\paddle_pdf_backend.exe`
+
+2. **Usage Examples**:
+   ```bash
+   # Navigate to the backend directory (or add it to your system PATH)
+   cd "C:\Users\<Username>\AppData\Local\PaddlePDF\resources\paddle_pdf_backend"
+
+   # 1. Diagnose system environment and GPU/CUDA setup
+   paddle_pdf_backend.exe --diagnose
+
+   # 2. List all available OCR models
+   paddle_pdf_backend.exe --list-models
+
+   # 3. Process a PDF in CPU mode (outputs are generated under the input PDF folder)
+   paddle_pdf_backend.exe -i "D:\path\to\book.pdf"
+
+   # 4. Process a PDF in GPU mode with a specific model
+   paddle_pdf_backend.exe -gpu -model ch_plus -i "D:\path\to\book.pdf"
+   ```
 
 ## Command-Line Arguments
 

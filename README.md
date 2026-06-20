@@ -22,49 +22,81 @@
 >
 > 如果源文件质量一般、使用较小的模型、或没有 CUDA 加速，体验会打较大折扣。**不能期望有开箱即用的准确度**，建议根据实际需求选择合适的模型和 DPI 设置。
 
-## 安装
+## 💾 安装指南
 
-需要 [pixi](https://pixi.sh) 包管理器和 [pnpm](https://pnpm.io)。
+为了方便不同需求的用户，我们分别提供了**普通用户版一键安装**与**开发调试环境搭建**。
 
-```bash
-# 1. 安装 Python 后端及基础依赖 (自动由 pixi 管理)
-pixi install
+### 1. 面向普通用户（推荐）
 
-# 2. 安装前端 Node.js 依赖
-pixi run frontend-install
-```
+普通用户**不需要**安装任何 Python、Node.js、Pixi 或 Git 等开发环境，直接安装打包好的客户端即可：
 
-## CLI 使用
+1. 前往 [Releases 页面](https://github.com/Jeoitim/paddle_pdf/releases) 下载最新版本的打包安装包（例如 `PaddlePDF_1.0.0_x64-setup.exe`）。
+2. 双击安装包，按照向导提示完成一键安装。
+3. 安装完成后，即可直接从桌面快捷方式双击启动 **PaddlePDF**。
 
-```bash
-# CPU 模式
-pixi run run -- -i "book.pdf"
+> 💡 **GPU 加速提示**：如果需要使用本地 NVIDIA 显卡进行 GPU 加速识别，请参见下方 [GPU 环境要求](#gpu-环境要求) 进行 CUDA 与 cuDNN 的简单配置。
 
-# GPU 模式（要求本地已配置 CUDA 与 cuDNN）
-pixi run run-gpu -- -i "book.pdf"
+---
 
-# 高精度模型 + GPU
-pixi run run-gpu -- -gpu -model=ch_plus -i "book.pdf"
+### 2. 面向开发者（源码运行与二次开发）
 
-# 只处理前 5 页
-pixi run run -- -i "book.pdf" --max-pages 5
+若您需要从源码调试、运行或参与开发，需要配置本地开发调试环境：
 
-# 查看所有模型
-pixi run run -- --list-models
-```
+- **前置依赖**：确保本地已安装 [Pixi](https://pixi.sh) 包管理器和 [pnpm](https://pnpm.io) 包管理器。
+- **环境搭建**：
+  ```bash
+  # 1. 安装 Python 核心及基础依赖 (自动由 pixi 配置隔离环境)
+  pixi install
 
-### 命令行参数
+  # 2. 安装前端 Node.js 依赖
+  pixi run frontend-install
+  ```
+
+---
+
+## 🚀 使用指南
+
+### 1. 普通用户使用方式
+
+#### ▌ 方式 A：图形界面 (GUI) 模式
+直接双击桌面图标运行 **PaddlePDF**。
+- 支持拖拽 PDF 文件到界面中进行批量队列处理。
+- 可在软件中查看/下载 7 种语言的 OCR 识别模型，并查看系统 GPU 可用状态。
+
+#### ▌ 方式 B：命令行 (CLI) 模式（脱离 Python 环境）
+打包安装后，后台引擎 `paddle_pdf_backend.exe` 已经脱离了 Python 依赖。您可以直接在命令行（PowerShell 或 CMD）中将其作为独立的 CLI 工具调用。
+- **可执行文件默认路径**：
+  `C:\Users\<您的 Windows 用户名>\AppData\Local\PaddlePDF\resources\paddle_pdf_backend\paddle_pdf_backend.exe`
+- **使用示例**：
+  ```bash
+  # 1. 切换到引擎所在目录
+  cd "C:\Users\<您的 Windows 用户名>\AppData\Local\PaddlePDF\resources\paddle_pdf_backend"
+
+  # 2. 诊断本地 GPU / CUDA 环境
+  paddle_pdf_backend.exe --diagnose
+
+  # 3. 列出所有可用的 OCR 模型
+  paddle_pdf_backend.exe --list-models
+
+  # 4. 运行 PDF 文本识别（默认 CPU 模式，结果输出在原 PDF 同级目录下）
+  paddle_pdf_backend.exe -i "D:\path\to\book.pdf"
+
+  # 5. 启用 GPU 加速 + 高精度模型识别
+  paddle_pdf_backend.exe -gpu -model ch_plus -i "D:\path\to\book.pdf"
+  ```
+- **命令行参数说明** 详见下表：
 
 | 参数              | 说明                                      | 默认                    |
 | --------------- | --------------------------------------- | --------------------- |
-| `-i, --input`   | **必填**，输入 PDF                           | —                     |
-| `-gpu`          | 启用 GPU 加速                               | 关闭                    |
+| `-i, --input`   | **必填**，输入 PDF 文件的绝对/相对路径      | —                     |
+| `-gpu`          | 启用 GPU 加速（需本地已配置 CUDA）          | 关闭                    |
 | `-model <名称>`   | OCR 模型 (ch/ch_plus/ch_server_v2/en/...) | ch                    |
-| `-o <目录>`       | 输出目录                                    | `<文件名>_ocr_output/`   |
+| `-o <目录>`       | 输出目录                                    | `<输入文件名>_ocr_output/` |
 | `--max-pages N` | 最多处理页数                                  | 全部                    |
-| `--dpi N`       | 渲染分辨率                                   | 300                   |
-| `--conf`        | 文本输出含置信度                                | 关闭                    |
-| `--list-models` | 列出所有模型                                  | —                     |
+| `--dpi N`       | 页面渲染分辨率 (高精度推荐 400)             | 300                   |
+| `--conf`        | 文本输出文件 (.txt) 包含置信度                 | 关闭                    |
+| `--list-models` | 列出所有可用模型并退出                         | —                     |
+| `--diagnose`    | 诊断本地 CUDA 和 GPU 状态                    | —                     |
 | `-v`            | 详细输出                                    | 关闭                    |
 
 ### 输出
@@ -74,31 +106,7 @@ pixi run run -- --list-models
 | `<文件名>_可搜索.pdf` | 带文字层 PDF，可搜索/复制 |
 | `<文件名>_文字.txt`  | 纯文本，默认不含置信度     |
 
-## GUI 使用
-
-### 开发模式（热重载）
-
-在开发环境下，前端和后端服务需在两个终端窗口分别启动：
-
-```bash
-# 终端 1：启动 Python FastAPI 后端服务
-pixi run backend-dev
-
-# 终端 2：启动前端 GUI
-pixi run tauri-dev
-```
-
-### 生产打包
-
-```bash
-# 1. 编译 Python 后端为独立可执行文件
-pixi run build-backend
-
-# 2. 调用 Rust tauri build 构建 NSIS 安装包
-pixi run tauri-build
-```
-
-### GUI 功能
+## GUI 核心功能
 
 - 📄 **拖拽上传**：直接拖入 PDF 文件，支持批量排队处理
 - 🔄 **实时进度**：逐页显示 OCR 处理进度，支持取消运行中/等待中的任务

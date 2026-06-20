@@ -12,14 +12,32 @@
 
 ## 快速开始
 
-### 安装
+为了让不同类型的用户顺利使用，我们提供了两种安装和运行路线：
 
-```bash
-# 克隆项目后，安装依赖
-pixi install
-```
+### 安装指南
+
+#### 1. 面向普通用户（推荐，一键安装）
+普通用户**不需要**安装任何 Git、Python、Node.js、Pixi 或 C++ 编译器环境：
+1. 请前往 [Releases 页面](https://github.com/Jeoitim/paddle_pdf/releases) 下载最新的免配置单文件安装包（例如 `PaddlePDF_1.0.0_x64-setup.exe`）。
+2. 双击安装包并按指引步骤完成安装，完成后可直接从桌面快捷方式启动可视化图形界面 (GUI)。
+
+#### 2. 面向开发者（源码运行与二次开发）
+若想在本地通过源码运行和调试，需要部署相关开发依赖：
+- 确保已安装 [Pixi](https://pixi.sh) 现代包管理器和 [pnpm](https://pnpm.io) 包管理器。
+- 在项目根目录下执行以下命令：
+  ```bash
+  # 自动克隆/配置 Python 运行时及 OCR 所需环境
+  pixi install
+
+  # 安装前端 Vue 与 Tauri 所需 Node.js 依赖
+  pixi run frontend-install
+  ```
+
+---
 
 ### 基本用法
+
+#### 开发环境（Pixi）
 
 ```bash
 # CPU 模式
@@ -32,6 +50,32 @@ pixi run run-gpu -- -i "book.pdf"
 run_ocr.bat -i "book.pdf"
 run_ocr.bat -gpu -i "book.pdf"
 ```
+
+#### 打包安装版本（生产环境）
+
+在编译打包或安装完成后，后台引擎 `paddle_pdf_backend.exe` 已经脱离了 Python 环境依赖，可以直接作为独立的 CLI 工具在终端（PowerShell 或 CMD）中运行：
+
+1. **可执行文件位置**：
+   - 默认安装路径通常为：`C:\Users\<用户名>\AppData\Local\PaddlePDF\resources\paddle_pdf_backend\paddle_pdf_backend.exe`
+   - 或者解压打包目录下的：`resources\paddle_pdf_backend\paddle_pdf_backend.exe`
+
+2. **使用示例**：
+   ```bash
+   # 切换至后台引擎所在目录（或将其加入系统环境变量 PATH）
+   cd "C:\Users\<用户名>\AppData\Local\PaddlePDF\resources\paddle_pdf_backend"
+
+   # 1. 运行系统环境与 GPU 诊断
+   paddle_pdf_backend.exe --diagnose
+
+   # 2. 列出所有可用的 OCR 模型
+   paddle_pdf_backend.exe --list-models
+
+   # 3. CPU 模式识别 PDF（输出生成在原 PDF 目录下）
+   paddle_pdf_backend.exe -i "D:\path\to\book.pdf"
+
+   # 4. GPU 模式 + 指定模型识别
+   paddle_pdf_backend.exe -gpu -model ch_plus -i "D:\path\to\book.pdf"
+   ```
 
 ## 命令行参数
 

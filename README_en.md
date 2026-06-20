@@ -22,83 +22,121 @@ A PDF text recognition tool based on PaddleOCR, supporting both **CLI** and **GU
 >
 > If the source file quality is mediocre, a smaller model is used, or CUDA acceleration is unavailable, the experience degrades significantly. **Do not expect out-of-the-box accuracy** — choose the appropriate model and DPI settings based on your needs.
 
-## Installation
+## 💾 Installation Guide
 
-Requires the [pixi](https://pixi.sh) package manager and [pnpm](https://pnpm.io).
+To accommodate different needs, we provide both **One-Click Installation for General Users** and **Local Development Setup for Developers**.
+
+### 1. For General Users (Recommended)
+
+General users **do not** need to install Python, Node.js, Pixi, or Git. Simply download and install the packaged application:
+
+1. Go to the [Releases page](https://github.com/Jeoitim/paddle_pdf/releases) and download the latest installer (e.g., `PaddlePDF_1.0.0_x64-setup.exe`).
+2. Run the installer and follow the prompt wizard to complete setup.
+3. Once installed, double-click the **PaddlePDF** shortcut on your desktop to run the application.
+
+> 💡 **GPU Acceleration Note**: If you want to use your NVIDIA GPU for accelerated text recognition, please refer to the [GPU Requirements](#gpu-requirements) section below for simple CUDA & cuDNN configurations.
+
+---
+
+### 2. For Developers (Local Source & Debugging)
+
+If you wish to debug, run from source, or contribute to code, configure your environment as follows:
+
+- **Prerequisites**: Install the [Pixi](https://pixi.sh) package manager and the [pnpm](https://pnpm.io) package manager.
+- **Environment Setup**:
+  ```bash
+  # 1. Install Python core and basic dependencies (automatically managed by pixi in an isolated environment)
+  pixi install
+
+  # 2. Install frontend Node.js dependencies
+  pixi run frontend-install
+  ```
+
+---
+
+## 🚀 User Guide
+
+### 1. General User Operations
+
+#### ▌ Mode A: Graphical User Interface (GUI) Mode
+Double-click the desktop shortcut to start **PaddlePDF**.
+- Drag and drop PDF files into the application for batch processing in a task queue.
+- Manage/download 7 language OCR models and monitor system GPU status.
+
+#### ▌ Mode B: Command-Line Interface (CLI) Mode (Standalone Executable)
+Once installed, the backend engine `paddle_pdf_backend.exe` runs completely independent of local Python environments. You can invoke it directly from CMD/PowerShell as a standalone CLI tool.
+- **Default Executable Path**:
+  `C:\Users\<Your Windows Username>\AppData\Local\PaddlePDF\resources\paddle_pdf_backend\paddle_pdf_backend.exe`
+- **Usage Examples**:
+  ```bash
+  # 1. Navigate to the backend engine folder
+  cd "C:\Users\<Your Windows Username>\AppData\Local\PaddlePDF\resources\paddle_pdf_backend"
+
+  # 2. Check local GPU / CUDA environment
+  paddle_pdf_backend.exe --diagnose
+
+  # 3. List all available OCR models
+  paddle_pdf_backend.exe --list-models
+
+  # 4. Perform text recognition on a PDF (CPU mode, outputs are generated in the input PDF's folder)
+  paddle_pdf_backend.exe -i "D:\path\to\book.pdf"
+
+  # 5. Perform OCR using GPU acceleration and a specific model
+  paddle_pdf_backend.exe -gpu -model ch_plus -i "D:\path\to\book.pdf"
+  ```
+- **Command-Line Arguments**:
+
+| Argument | Description | Default |
+|---|---|---|
+| `-i, --input` | **Required**, input PDF file path (absolute or relative) | — |
+| `-gpu` | Enable GPU acceleration (requires CUDA setup) | Off |
+| `-model <name>` | OCR model name (ch/ch_plus/ch_server_v2/en/...) | ch |
+| `-o <dir>` | Output directory | `<filename>_ocr_output/` |
+| `--max-pages N` | Maximum pages to process | All |
+| `--dpi N` | Render resolution (400 recommended for dense text) | 300 |
+| `--conf` | Include confidence scores in output text file (.txt) | Off |
+| `--list-models` | List all available models and exit | — |
+| `--diagnose` | Diagnose local CUDA and GPU status and exit | — |
+| `-v` | Verbose output | Off |
+
+- **Output Files**: Upon completion, the tool generates `<filename>_searchable.pdf` (fully copyable and Ctrl+F searchable PDF with transparent text layer) and `<filename>_text.txt` (recognized raw text output).
+
+---
+
+### 2. Developer Operations & Debugging
+
+#### ▌ Local Development Hot Reload
+For local development, start the frontend (Vite) and backend (FastAPI) separately in two terminal windows:
 
 ```bash
-# 1. Install Python backend and basic dependencies (automatically managed by pixi)
-pixi install
+# Terminal 1: Start the Python FastAPI backend sidecar service
+pixi run backend-dev
 
-# 2. Install frontend Node.js dependencies
-pixi run frontend-install
+# Terminal 2: Start the frontend GUI webview
+pixi run tauri-dev
 ```
 
-## CLI Usage
-
+#### ▌ Local CLI Execution
+Directly execute CLI commands using Pixi tasks under the development env:
 ```bash
 # CPU mode
 pixi run run -- -i "book.pdf"
 
 # GPU mode
 pixi run run-gpu -- -i "book.pdf"
-
-# High-accuracy model + GPU
-pixi run run-gpu -- -gpu -model=ch_plus -i "book.pdf"
-
-# Process only the first 5 pages
-pixi run run -- -i "book.pdf" --max-pages 5
-
-# List all models
-pixi run run -- --list-models
 ```
 
-### Command-Line Arguments
-
-| Argument | Description | Default |
-|---|---|---|
-| `-i, --input` | **Required**, input PDF file | — |
-| `-gpu` | Enable GPU acceleration | Off |
-| `-model <name>` | OCR model (ch/ch_plus/ch_server_v2/en/...) | ch |
-| `-o <dir>` | Output directory | `<filename>_ocr_output/` |
-| `--max-pages N` | Max pages to process | All |
-| `--dpi N` | Render resolution | 300 |
-| `--conf` | Include confidence in text output | Off |
-| `--list-models` | List all available models | — |
-| `-v` | Verbose output | Off |
-
-### Output
-
-| File | Description |
-|---|---|
-| `<filename>_searchable.pdf` | PDF with text layer, searchable/copyable |
-| `<filename>_text.txt` | Plain text, confidence scores off by default |
-
-## GUI Usage
-
-### Development Mode (Hot Reload)
-
-In the development environment, the frontend and backend services must be started in two separate terminal windows:
-
+#### ▌ Production Packaging
+When your changes are ready, compile and bundle the application:
 ```bash
-# Terminal 1: Start the Python FastAPI backend service
-pixi run backend-dev
-
-# Terminal 2: Start the frontend GUI
-pixi run tauri-dev
-```
-
-### Production Packaging
-
-```bash
-# 1. Compile the Python backend into a standalone executable
+# 1. Compile Python backend to a standalone executable folder (dist/paddle_pdf_backend/)
 pixi run build-backend
 
-# 2. Invoke Rust tauri build to construct the NSIS installer
+# 2. Invoke Rust tauri build to compile the webview assets and generate the final NSIS installer
 pixi run tauri-build
 ```
 
-### GUI Features
+## GUI Features
 
 - 📄 **Drag & Drop**: Drag in PDF files, supports batch queue processing
 - 🔄 **Real-Time Progress**: Page-by-page OCR processing progress, cancel running/queued tasks
