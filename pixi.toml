@@ -53,7 +53,7 @@ tauri-build = { cmd = "pnpm tauri build", cwd = "src-frontend" }
 
 # Backend
 backend-dev = { cmd = "python -m paddle_pdf.app.http_server", env = { PYTHONPATH = "src" } }
-build-backend = { cmd = "pyinstaller backend/paddle_pdf_backend.spec --distpath backend/dist --workpath backend/build", env = { PYTHONPATH = "src" } }
+build-backend = { cmd = "pyinstaller backend/paddle_pdf_backend.spec --distpath backend/dist --workpath backend/build --noconfirm", env = { PYTHONPATH = "src" } }
 
 # Dev tools
 lint = "ruff check ."

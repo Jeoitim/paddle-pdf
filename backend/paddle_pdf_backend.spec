@@ -20,7 +20,7 @@ excludes = [
     "pytest","IPython","ipykernel","ipython_genutils","jupyter","notebook",
     "Cython","numba","llvmlite",
     "tkinter","PyQt5","PyQt6","wx",
-    "test","tests","unittest","xmlrpc","lib2to3",
+    "lib2to3",
     "conda","conda_package_handling","conda_package_streaming",
 ]
 

@@ -37,20 +37,32 @@ fn spawn_backend(mut cmd: std::process::Command, port_state: Arc<Mutex<Option<u1
         };
 
         let stdout = child.stdout.take().expect("No stdout from backend");
-        let mut reader = BufReader::new(stdout);
-        let mut first_line = String::new();
-        if reader.read_line(&mut first_line).is_ok() {
-            let port_str = first_line.trim();
-            if let Ok(port) = port_str.parse::<u16>() {
-                let mut guard = port_state.lock().unwrap();
-                *guard = Some(port);
-                eprintln!("[tauri] Python backend ready on port {}", port);
-            } else {
-                eprintln!("[tauri] Failed to parse backend port from: {:?}", port_str);
+        let reader = BufReader::new(stdout);
+        let mut port_found = false;
+
+        for line_res in reader.lines() {
+            match line_res {
+                Ok(line) => {
+                    let trimmed = line.trim();
+                    if !port_found && trimmed.starts_with("PADDLE_PDF_PORT=") {
+                        if let Some(port_str) = trimmed.split('=').nth(1) {
+                            if let Ok(port) = port_str.trim().parse::<u16>() {
+                                let mut guard = port_state.lock().unwrap();
+                                *guard = Some(port);
+                                eprintln!("[tauri] Python backend ready on port {}", port);
+                                port_found = true;
+                            }
+                        }
+                    }
+                    eprintln!("[backend stdout] {}", trimmed);
+                }
+                Err(e) => {
+                    eprintln!("[tauri] Error reading backend stdout: {:?}", e);
+                    break;
+                }
             }
         }
 
-        // Keep reading stderr for logging (already piped to inherit but drain stdout)
         let _ = child.wait();
     });
 }
@@ -118,6 +130,9 @@ fn main() {
                 eprintln!("[tauri] Spawning production backend sidecar: {:?}", backend_exe);
                 cmd = std::process::Command::new(backend_exe);
             }
+
+            let current_pid = std::process::id();
+            cmd.env("PADDLE_PDF_PARENT_PID", current_pid.to_string());
 
             spawn_backend(cmd, port_state_clone);
             Ok(())

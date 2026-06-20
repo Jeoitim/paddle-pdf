@@ -56,9 +56,7 @@ app = FastAPI(title="PaddlePDF Backend", version=APP_VERSION)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["tauri://localhost", "http://localhost", "http://127.0.0.1"],
-    allow_origin_regex=r"https?://localhost(:\d+)?",
-    allow_credentials=True,
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -239,7 +237,7 @@ async def shutdown():
     _task_queue.shutdown(wait=False)
     async def _do_shutdown():
         await asyncio.sleep(0.3)
-        os.kill(os.getpid(), signal.SIGTERM)
+        os._exit(0)
     asyncio.create_task(_do_shutdown())
     return {"ok": True}
 
@@ -247,13 +245,53 @@ async def shutdown():
 # -- Entry point ---------------------------------------------------------------
 def main() -> None:
     import socket
+    import threading
+    import ctypes
+    import time
+
+    parent_pid_str = os.environ.get("PADDLE_PDF_PARENT_PID")
+    if parent_pid_str:
+        try:
+            parent_pid = int(parent_pid_str)
+
+            def watch_parent_lifetime() -> None:
+                if platform.system() == "Windows":
+                    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+                    kernel32 = ctypes.windll.kernel32
+                    while True:
+                        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, parent_pid)
+                        if handle:
+                            exit_code = ctypes.c_ulong()
+                            kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code))
+                            kernel32.CloseHandle(handle)
+                            if exit_code.value != 259: # 259 is STILL_ACTIVE
+                                break
+                        else:
+                            break
+                        time.sleep(1)
+                else:
+                    while True:
+                        try:
+                            os.kill(parent_pid, 0)
+                        except OSError:
+                            break
+                        time.sleep(1)
+
+                logger.info("Parent process %d exited. Shutting down.", parent_pid)
+                os._exit(0)
+
+            t = threading.Thread(target=watch_parent_lifetime, daemon=True)
+            t.start()
+        except Exception as e:
+            logger.error("Failed to start parent process watcher: %s", e)
+
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
     port = s.getsockname()[1]
     s.close()
 
     # Print port to stdout — Tauri reads this to know where to connect
-    print(port, flush=True)
+    print(f"PADDLE_PDF_PORT={port}", flush=True)
     logger.info("PaddlePDF backend starting on http://127.0.0.1:%d", port)
 
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning", access_log=False)
