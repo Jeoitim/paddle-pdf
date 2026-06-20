@@ -6,9 +6,11 @@
 
 - **排版复杂度**：排版越简单（单栏、无图文混排），效果越好
 - **源文件清晰度**：扫描件/照片质量越高，OCR 识别越准，文字层贴合度越高
-- **模型大小**：大体积模型（如 `ch_server_v2`）精度显著优于轻量模型
+- **模型大小**：大体积模型（如 `ch_plus` 或 `ch_server_v2`）精度显著优于轻量模型
 
-如果源文件质量一般、使用较小的模型、或没有 CUDA 加速，体验会打较大折扣。**不能期望有开箱即用的准确度**，建议根据实际需求选择合适的模型和 DPI 设置。
+如果源文件质量一般、使用较小的模型、或没有 CUDA 加速，体验会打较大折扣。**不能期望有开箱即用的百分百准确度**，建议根据实际需求选择合适的模型和 DPI 设置。
+
+---
 
 ## 快速开始
 
@@ -21,7 +23,7 @@
 1. 请前往 [Releases 页面](https://github.com/Jeoitim/paddle_pdf/releases) 下载最新的免配置单文件安装包（例如 `PaddlePDF_1.0.0_x64-setup.exe`）。
 2. 双击安装包并按指引步骤完成安装，完成后可直接从桌面快捷方式启动可视化图形界面 (GUI)。
 
-#### 2. 面向开发者（源码运行与二次开发）
+#### 2. 面向开发者与高级用户（源码运行与二次开发）
 若想在本地通过源码运行和调试，需要部署相关开发依赖：
 - 确保已安装 [Pixi](https://pixi.sh) 现代包管理器和 [pnpm](https://pnpm.io) 包管理器。
 - 在项目根目录下执行以下命令：
@@ -35,137 +37,136 @@
 
 ---
 
-### 基本用法
+## 图形界面 (GUI) 模式使用
 
-#### 开发环境（Pixi）
+GUI（图形界面）是为大多数普通用户设计的首选模式，提供直观的操作与直观的进度反馈。
 
-```bash
-# CPU 模式
-pixi run run -- -i "book.pdf"
+### 核心功能
 
-# GPU 模式
-pixi run run-gpu -- -i "book.pdf"
+- 📄 **拖拽上传**：直接拖入一个或多个 PDF 文件，支持批量排队处理。
+- 🔄 **实时进度**：逐页显示 OCR 处理进度，支持取消运行中/等待中的任务。
+- 🧠 **模型管理**：查看/下载/切换 7 种不同语言 of OCR 模型。
+- 💻 **GPU 状态**：自动检测 CUDA 环境，显示当前 GPU 的可用性。
+- 🌙 **深色模式**：支持明暗主题切换，设置自动保存。
+- 📂 **快捷操作**：双击任务卡片或点击按钮，一键打开输出文件/所在的文件夹。
 
-# 或使用批处理脚本
-run_ocr.bat -i "book.pdf"
-run_ocr.bat -gpu -i "book.pdf"
-```
+### 任务队列与状态
 
-#### 打包安装版本（生产环境）
+GUI 支持后台任务队列功能（默认 `max_workers=1` 顺序执行，防止多个模型并发导致 GPU 显存溢出）：
+- `pending`：排队等待中
+- `extracting` / `ocr_running` / `saving`：正在处理（提取页面、运行 OCR 识别、合成保存 PDF）
+- `completed`：处理完成，可直接在界面上点击打开
+- `failed`：处理失败（悬停或点击可查看具体错误日志）
+- `cancelled`：用户手动取消的任务
 
-在编译打包或安装完成后，后台引擎 `paddle_pdf_backend.exe` 已经脱离了 Python 环境依赖，可以直接作为独立的 CLI 工具在终端（PowerShell 或 CMD）中运行：
+---
 
-1. **可执行文件位置**：
-   - 默认安装路径通常为：`C:\Users\<用户名>\AppData\Local\PaddlePDF\resources\paddle_pdf_backend\paddle_pdf_backend.exe`
-   - 或者解压打包目录下的：`resources\paddle_pdf_backend\paddle_pdf_backend.exe`
+## 命令行 (CLI) 模式使用（面向高级用户与开发人员）
 
-2. **使用示例**：
-   ```bash
-   # 切换至后台引擎所在目录（或将其加入系统环境变量 PATH）
-   cd "C:\Users\<用户名>\AppData\Local\PaddlePDF\resources\paddle_pdf_backend"
+后台引擎支持丰富的 CLI 命令行参数，便于在终端下批量运行，或编写脚本进行自动化处理。
 
-   # 1. 运行系统环境与 GPU 诊断
-   paddle_pdf_backend.exe --diagnose
+### 1. 运行命令（开发环境 vs 生产环境）
 
-   # 2. 列出所有可用的 OCR 模型
-   paddle_pdf_backend.exe --list-models
+根据所处的环境，启动 CLI 的命令有所不同：
 
-   # 3. CPU 模式识别 PDF（输出生成在原 PDF 目录下）
-   paddle_pdf_backend.exe -i "D:\path\to\book.pdf"
+#### ▌ 路线 A：本地开发环境（使用源码运行）
+在开发环境中，需要通过 **Pixi** 包管理器作为前缀来调用，确保环境隔离。
+*   **格式**：必须加双横杠 `--` 才能向底层脚本传递参数！
+*   **CPU 模式**：
+    ```bash
+    pixi run run -- -i "path/to/book.pdf"
+    ```
+*   **GPU 模式**：
+    ```bash
+    pixi run run-gpu -- -i "path/to/book.pdf"
+    ```
 
-   # 4. GPU 模式 + 指定模型识别
-   paddle_pdf_backend.exe -gpu -model ch_plus -i "D:\path\to\book.pdf"
-   ```
+#### ▌ 路线 B：打包安装版本（生产环境）
+在编译打包或安装完成后，后台引擎 `paddle_pdf_backend.exe` 已经脱离了 Python 环境依赖，可以直接作为独立的 CLI 工具在终端（PowerShell 或 CMD）中运行，**无需加 `pixi` 前缀，也不需要双横杠 `--`**。
+*   **默认安装路径**：`C:\Users\<用户名>\AppData\Local\PaddlePDF\resources\paddle_pdf_backend\paddle_pdf_backend.exe`
+*   **示例**：
+    ```bash
+    # 切换至后台引擎所在目录（或将其路径加入系统环境变量 PATH 中）
+    cd "C:\Users\<用户名>\AppData\Local\PaddlePDF\resources\paddle_pdf_backend"
 
-## 命令行参数
+    # 执行 OCR（默认 CPU）
+    paddle_pdf_backend.exe -i "D:\path\to\book.pdf"
+
+    # 启用 GPU 并指定高精度模型
+    paddle_pdf_backend.exe -gpu -model ch_plus -i "D:\path\to\book.pdf"
+    ```
+
+---
+
+### 2. 命令行参数说明
 
 | 参数 | 说明 | 默认值 |
-|------|------|--------|
+|---|---|---|
 | `-i, --input` | **必填**，输入 PDF 文件路径 | — |
-| `-gpu` | 启用 GPU 加速 | 关闭 |
-| `-model <名称>` | OCR 模型 | `ch` |
+| `-gpu` | 启用 GPU 加速（需本地已配置 CUDA） | 关闭 |
+| `-model <名称>` | OCR 模型名称 (ch/ch_plus/ch_server_v2/en/...) | `ch` |
 | `-o <目录>` | 输出目录 | `<输入文件名>_ocr_output/` |
-| `--max-pages N` | 最多处理页数 (0=全部) | 0 |
-| `--dpi N` | PDF 渲染分辨率 | 300 |
-| `--conf` | 文本输出包含置信度 | 关闭 |
+| `--max-pages N` | 最多处理页数 (0 表示全部) | 0 |
+| `--dpi N` | 渲染分辨率 (推荐 300，小字或密集文本推荐 400) | 300 |
+| `--conf` | 文本输出文件 (.txt) 包含置信度 | 关闭 |
 | `--angle-cls` | 启用方向分类 | 开启 |
-| `--no-angle-cls` | 禁用方向分类 (更快) | — |
-| `--list-models` | 列出所有可用模型 | — |
-| `--force-redownload` | 强制重新下载模型 | — |
+| `--no-angle-cls` | 禁用方向分类 (可略微加快速度) | — |
+| `--list-models` | 列出所有可用模型并退出 | — |
+| `--force-redownload` | 强制重新下载模型文件 | — |
+| `--diagnose` | 诊断本地 GPU 和 CUDA 安装环境并退出 | — |
 | `-v` | 详细输出 | 关闭 |
 
-## 使用示例
+---
 
-### 基本 OCR
+### 3. CLI 使用示例
 
+#### ▌ 系统诊断
 ```bash
-# 默认中文模型，CPU 模式
-pixi run run -- -i "文档.pdf"
-
-# GPU 加速
-pixi run run-gpu -- -i "文档.pdf"
+# 检查本地显卡及 CUDA、cuDNN 动态库是否配置正确
+paddle_pdf_backend.exe --diagnose
+# (开发环境)
+pixi run run -- --diagnose
 ```
 
-### 指定模型
-
+#### ▌ 查看可用模型
 ```bash
-# 高精度模型
-pixi run run-gpu -- -gpu -model=ch_plus -i "文档.pdf"
-
-# 最高精度（适合古籍、竖排）
-pixi run run-gpu -- -gpu -model=ch_server_v2 -i "古籍.pdf" --dpi 400
-
-# 查看所有模型
+paddle_pdf_backend.exe --list-models
+# (开发环境)
 pixi run run -- --list-models
 ```
 
-### 限制页数
-
+#### ▌ 限制页数与自定义输出
 ```bash
-# 只处理前 5 页（预览）
-pixi run run -- -i "大文件.pdf" --max-pages 5
+# 仅处理前 5 页进行效果预览，并将结果保存至指定目录
+paddle_pdf_backend.exe -i "book.pdf" --max-pages 5 -o "D:\ocr_results"
+# (开发环境)
+pixi run run -- -i "book.pdf" --max-pages 5 -o "D:\ocr_results"
 ```
 
-### 自定义输出
+---
 
-```bash
-# 指定输出目录
-pixi run run -- -i "文档.pdf" -o "./输出"
-
-# 输出包含置信度
-pixi run run -- -i "文档.pdf" --conf
-```
-
-### 使用批处理脚本 (Windows)
-
-```bash
-run_ocr.bat -i "book.pdf"
-run_ocr.bat -gpu -i "book.pdf"
-run_ocr.bat -gpu -model=ch_plus -i "book.pdf" --max-pages 10
-run_ocr.bat -i "book.pdf" --conf
-run_ocr.bat --list-models
-```
-
-## 可用模型
+## 可用模型说明
 
 | 模型 | 语言 | 说明 | 推荐场景 |
 |------|------|------|----------|
 | `ch` | 中文、英文 | mobile slim (最快) | **默认**，大多数中文 PDF |
 | `ch_plus` | 中文、英文 | server (更准) | 排版复杂、印刷质量一般 |
-| `ch_server_v2` | 中文、英文 | server v2 (最准) | 竖排繁體、古籍、模糊扫描件 |
-| `en` | 英文 | English 专用 | 英文原版书、论文 |
+| `ch_server_v2` | 中文、英文 | server v2 (最准) | 繁体字、古籍、模糊扫描件 |
+| `en` | 英文 | English 专用 | 英文原版书、学术论文 |
 | `cyrillic` | 俄文等 | Cyrillic 字母 | 俄语 PDF |
 | `japanese` | 日文、中文 | Japanese + Chinese | 日文 PDF |
 | `korean` | 韩文、中文 | Korean + Chinese | 韩文 PDF |
 
-## 输出文件
+---
 
-处理完成后在输出目录生成：
+## 输出文件说明
+
+处理完成后在输出目录生成两个文件：
 
 | 文件 | 说明 |
 |------|------|
-| `<文件名>_可搜索.pdf` | 带文字层的 PDF，可 Ctrl+F 搜索、Ctrl+C 复制 |
-| `<文件名>_文字.txt` | 纯文本输出，默认不含置信度（加 `--conf` 显示） |
+| `<文件名>_可搜索.pdf` | 带透明文字层的 PDF，可 Ctrl+F 搜索、直接选中并划词复制 |
+| `<文件名>_文字.txt` | 纯文本输出，记录了识别出的原始文本（默认不含置信度） |
 
 ### 文本输出格式
 
@@ -177,7 +178,7 @@ GPU: Yes
 ============================================================
 
 --- Page 1 (14 lines, conf=89.6%) ---
-  中國古典文學理論批評專著選輯
+  中國古典文學理論批評專著选辑
   詩品注
 
 ============================================================
@@ -189,136 +190,93 @@ Pages processed: 5
 使用 `--conf` 时（含置信度）：
 ```
 --- Page 1 (14 lines, conf=89.6%) ---
-  中國古典文學理論批評專著選輯  [conf:95%]
+  中國古典文學理論批評專著选辑  [conf:95%]
   詩品注  [conf:92%]
   模糊文字  [conf:67%]
 ```
 
-## 任务队列（GUI 批量处理）
+---
 
-GUI 支持任务队列功能，可以连续添加多个 PDF 文件，后台按顺序逐个处理：
-
-### 使用方法
-
-1. 拖入或选择 PDF 文件后，任务自动进入队列
-2. 等待中的任务显示在 **队列** 区域，运行中的任务显示在 **正在处理** 区域
-3. 每个任务可单独 **取消**（等待中的任务直接移除，运行中的任务中断处理）
-4. 完成/失败/取消的任务显示在 **已完成** 区域，可单独移除或一键清空
-
-### 任务状态
-
-| 状态 | 说明 |
-|------|------|
-| `pending` | 排队等待中 |
-| `extracting` / `ocr_running` / `saving` | 正在处理 |
-| `completed` | 处理完成 |
-| `failed` | 处理失败（可查看错误信息） |
-| `cancelled` | 已取消 |
-
-### 注意事项
-
-- 任务默认 **顺序执行**（`max_workers=1`），因为 GPU 显存通常不足以同时加载多个模型
-- 每个任务使用独立的 `OcrService` 实例，模型互不干扰
-- 取消操作：等待中的任务直接跳过；运行中的任务通过 `InterruptedError` 中断
-- 任务完成后，前端通过 `task://completed` 事件接收完整结果数据
-
-## GPU 加速
+## GPU 加速配置
 
 ### 环境要求
 
 | 组件 | 说明 | 推荐/要求版本 |
-|------|------|--------------|
+|---|---|---|
 | NVIDIA GPU | RTX 3060+ (6GB+) 推荐 | 具备 CUDA 核心 |
 | NVIDIA 驱动 | 需安装较新显卡驱动以支持 CUDA 12.x | [驱动下载官网](https://www.nvidia.com/Download/index.aspx) |
 | CUDA Toolkit | 核心运行库 (当前 Paddle 构建基于 **CUDA 12.6**) | **12.6** (或 12.x 兼容版本)<br>[CUDA 历史版本归档下载](https://developer.nvidia.com/cuda-toolkit-archive) |
 | cuDNN | 深度神经网络加速库，需手动解压合并至 CUDA 目录 | **v9.x** (或适配 CUDA 12.x 的 v8.x)<br>[cuDNN 官网下载](https://developer.nvidia.com/cudnn) |
 
-### NVIDIA 相关工具链安装步骤指南
+### 安装步骤指南
 
 #### 1. 安装/更新显卡驱动
-1. 访问 [NVIDIA 驱动下载官网](https://www.nvidia.com/Download/index.aspx)。
-2. 根据您的显卡型号进行选择并下载最新驱动，完成安装。
+1.  访问 [NVIDIA 驱动下载官网](https://www.nvidia.com/Download/index.aspx)。
+2.  根据您的显卡型号下载并安装最新显卡驱动。
 
 #### 2. 安装 CUDA Toolkit (以 CUDA 12.6 为例)
-1. 访问 [CUDA 12.6 下载页面](https://developer.nvidia.com/cuda-12-6-0-download-archive) (或从 [CUDA 历史版本归档](https://developer.nvidia.com/cuda-toolkit-archive) 选择 12.6 版本)。
-2. 选择您的操作系统平台（Windows -> x86_64 -> 10 或 11 -> exe (local)），点击下载安装包。
-3. 运行安装包，推荐选择“精简安装 (Express)”。安装程序会自动设置环境变量 `CUDA_PATH` 并在系统环境变量 `Path` 中追加必要的 bin 路径（默认安装在 `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6`）。
+1.  访问 [CUDA 12.6 下载页面](https://developer.nvidia.com/cuda-12-6-0-download-archive)。
+2.  选择 Windows -> x86_64 -> 对应的系统版本 -> exe (local) 进行下载。
+3.  运行安装包，推荐选择“精简安装 (Express)”。安装程序会自动设置 `CUDA_PATH` 环境变量，并将 bin 路径追加至 `Path`（默认在 `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6`）。
 
 #### 3. 安装 cuDNN 加速库
-PaddleOCR 的文本检测与识别依赖 cuDNN 才能在 GPU 上全速运转：
-1. 访问 [NVIDIA cuDNN 官网下载页面](https://developer.nvidia.com/cudnn)。首次下载需要注册/登录 NVIDIA 账号。
-2. 下载与您的 CUDA 版本（如 CUDA 12.x）相匹配的 cuDNN 压缩包（Windows (x64) 版本的 zip 压缩包）。
-3. 下载完成后解压压缩包，您会看到 `bin/`, `include/`, `lib/` 三个目录。
-4. 将解压出来的这三个文件夹里的**所有文件**复制，并粘贴合并到您的 CUDA Toolkit 安装根目录中。例如默认路径：
-   `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6\`
-   *提示：如果系统提示“替换目标中的文件”，请选择“替换”。*
+PaddleOCR 依赖 cuDNN 进行神经网络加速：
+1. 访问 [NVIDIA cuDNN 下载页面](https://developer.nvidia.com/cudnn)（可能需要注册 NVIDIA 账号）。
+2. 下载与 CUDA 12.x 兼容的 Windows (x64) zip 压缩包。
+3. 解压后，将压缩包内 `bin/`、`include/`、`lib/` 文件夹中的**所有文件**复制合并粘贴到 CUDA Toolkit 安装根目录对应的同名文件夹中。例如：
+   `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6\` (遇到同名文件选择“替换”)。
 
 #### 4. 验证环境变量
-1. 打开终端（或 PowerShell/cmd），输入以下命令检查 CUDA 编译器是否可用：
+1. 打开终端，运行 `nvcc -V`。如显示 `release 12.6`，则说明 CUDA 编译器可用。
+2. 确保 CUDA 目录的 `bin` 路径已在系统的 `Path` 环境变量中。
+3. 若需在**开发环境**下验证，可运行：
    ```bash
-   nvcc -V
+   pixi run check-gpu
    ```
-   若输出中显示 `release 12.6`，则说明 CUDA 安装成功。
-2. 确保 `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6\bin` 目录在您的系统 `Path` 环境变量中。
 
-### 验证 GPU
-
-```bash
-pixi run check-gpu
-```
-
-### 常见 GPU 问题
-
-**GPU 检测返回 0**：
-1. 检查 `nvcc -V` 输出，确认 CUDA 是否正确安装并加入系统 `Path`。
-2. 确认 cuDNN 的 `.dll` 文件（如 `cudnn64_*.dll` 或 `cudnn_ops_infer64_*.dll`）已成功拷贝到 CUDA 安装目录的 `bin/` 文件夹中。
-3. 重启计算机以确保新配置的系统环境变量完全生效。
+---
 
 ## 性能参考
 
 测试环境：Intel i7-10870H + NVIDIA RTX 3060 Laptop (6GB)
 
-| 模式 | 模型 | DPI | 每页耗时 |
-|------|------|-----|---------|
+| 模式 | Model | DPI | 每页平均耗时 |
+|---|---|---|---|
 | CPU | ch | 300 | 15-20s |
 | GPU | ch | 300 | 3-5s |
 | GPU | ch_plus | 300 | 8-12s |
 | GPU | ch_server_v2 | 300 | 15-25s |
 
+---
+
 ## 故障排除
 
 ### 识别结果有乱码 / 划词复制乱码
 
-*   **划词复制后在记事本/Edge 浏览器中显示为 `???` 问号**：
-    此问题在最新版本中已完全修复。软件会在 PDF 内部嵌入完整的 unicode 字符映射表（TofromUnicode）以及本地 CJK 字体文件（如 Windows 的 `simsun.ttc` 等）。若您的操作系统中缺少常见中文字体，程序将自动降级使用内置的 `cjk` 字体库。请确保运行本软件的系统中至少存在一种中文字体。
-*   **OCR 识别本身有错别字或无法识别**：
-    *   PDF 页面分辨率过低：试着增加分辨率，添加参数 `--dpi 400`（默认 300）重新运行。
-    *   模型精度不足：使用 `-model=ch_plus` 或最高精度的 `-model=ch_server_v2` 识别繁体、古籍或手写体。
+- **划词复制后在记事本中显示为 `???` 问号**：
+  此问题在最新版本中已完全修复。软件会在 PDF 内部嵌入完整的 Unicode 字符映射表（ToUnicode）以及本地 CJK 字体文件（如 Windows 的 `simsun.ttc`）。若系统中缺少常见中文字体，程序会自动降级使用内置的 `cjk` 字体库。
+- **OCR 识别错误或文字模糊**：
+  - PDF 页面分辨率过低：建议提高渲染分辨率，添加参数 `--dpi 400` 重新运行。
+  - 模型精度不足：对于竖排、繁体或古籍，使用 `--model ch_server_v2`。
 
-### 划词选中高亮错位、漂移或文本折行
+### 划词选中高亮错位、漂移
 
-*   **划词选中时高亮框与图片背景字不重合**：
-    最新版本引入了 **字形物理宽度匹配与垂直居中算法**，文字层已高度贴合底层图像文字。
-    *   如果依然有轻微的像素级漂移，主要是因为 OCR 模型返回的 bounding box 在低分辨率下不够精细。可以通过提升渲染 DPI 来解决，例如添加 `--dpi 400`。
-    *   极少数字体因为字符间距（Kerning）极其特殊，可能会有些许偏差，但完全不影响搜索和整行文本的复制。
+- **选中高亮框与图片背景字不重合**：
+  最新版引入了 **字形物理宽度匹配与垂直居中算法**，贴合度极高。
+  - 若仍有像素级漂移，多是因为 OCR 引擎定位框较粗糙。建议通过提升 DPI（例如 `--dpi 400`）提高检测精度。
 
 ### 内存不足 (OOM)
 
-*   当处理超大分辨率 PDF 或长文档时可能遇到内存不足：
-    *   降低 DPI：改用 `--dpi 200`（速度更快，但会稍微牺牲识别准确率度）。
-    *   分批页数处理：通过 `--max-pages 20` 限制单词处理的页面数量。
-
-### PDF 加密无法处理
-
-先用其他工具解除密码保护，再进行 OCR。
+- 处理长文档或超大分辨率 PDF 时可能遇到 OOM：
+  - 降低 DPI：使用 `--dpi 200` 运行。
+  - 分批处理：使用 `--max-pages 20` 限制单词处理的最大页数。
 
 ### 模型下载失败
 
-```bash
-# 强制重新下载
-pixi run run -- -i "book.pdf" --force-redownload
-```
-
-模型缓存位置：
-- `~/.paddleocr/` — PaddleOCR 模型
-- `~/.paddlex/` — PaddleX 模型
+- 在命令行重试，或添加强制重新下载参数：
+  ```bash
+  paddle_pdf_backend.exe -i "book.pdf" --force-redownload
+  ```
+- 默认缓存位置：
+  - `~/.paddleocr/` — PaddleOCR 核心模型
+  - `~/.paddlex/` — PaddleX 模型
