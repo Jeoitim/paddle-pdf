@@ -1,8 +1,18 @@
 # PaddlePDF
 
-A PDF text recognition tool based on PaddleOCR, supporting both **CLI** and **GUI** modes.
+<div align="center">
+<img src="doc/paddlepdf-icon.png" alt="PaddlePDF Banner" width="50%" />
+</div>
 
-> **[中文版](README.md)** | English
+<div align="center">
+<strong>A high-precision, low-barrier, GPU-accelerated local OCR extraction and transparent text layer synthesis tool.</strong>
+</div>
+
+**[中文版](README.md)** | English
+
+---
+
+A PDF text recognition tool based on PaddleOCR, supporting both **CLI** and **GUI** modes.
 
 ## Features
 

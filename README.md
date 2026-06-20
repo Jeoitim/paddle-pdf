@@ -1,7 +1,16 @@
 # PaddlePDF
 
-> **中文** | [English](README_en.md)
+<div align="center">
+<img src="doc/paddlepdf-icon.png" alt="PaddlePDF Banner" width="50%" />
+</div>
 
+<div align="center">
+<strong>高精度、低门槛、支持 GPU 加速的本地 OCR 提取与PDF合成工具。</strong>
+</div>
+
+ **中文** | [English](README_en.md)
+
+------------------------------------------------------------------------
 基于 PaddleOCR 的 PDF 文字识别工具，支持 **CLI 命令行** 和 **GUI 图形界面** 两种使用方式。
 
 ## 功能
@@ -15,10 +24,7 @@
 
 > **⚠️ 关于可搜索 PDF 质量的说明**
 >
-> 可搜索文本层的定位精度与以下因素密切相关：
-> - **排版复杂度**：排版越简单（单栏、无图文混排），效果越好
-> - **源文件清晰度**：扫描件/照片质量越高，OCR 识别越准，文字层贴合度越高
-> - **模型大小**：大体积模型（如 `ch_server_v2`）精度显著优于轻量模型
+> 可搜索文本层的定位精度与以下因素密切相关： - **排版复杂度**：排版越简单（单栏、无图文混排），效果越好 - **源文件清晰度**：扫描件/照片质量越高，OCR 识别越准，文字层贴合度越高 - **模型大小**：大体积模型（如 `ch_server_v2`）精度显著优于轻量模型
 >
 > 如果源文件质量一般、使用较小的模型、或没有 CUDA 加速，体验会打较大折扣。**不能期望有开箱即用的准确度**，建议根据实际需求选择合适的模型和 DPI 设置。
 
@@ -30,21 +36,23 @@
 
 普通用户**不需要**安装任何 Python、Node.js、Pixi 或 Git 等开发环境，直接安装打包好的客户端即可：
 
-1. 前往 [Releases 页面](https://github.com/Jeoitim/paddle_pdf/releases) 下载最新版本的打包安装包（例如 `PaddlePDF_1.0.0_x64-setup.exe`）。
-2. 双击安装包，按照向导提示完成一键安装。
-3. 安装完成后，即可直接从桌面快捷方式双击启动 **PaddlePDF**。
+1.  前往 [Releases 页面](https://github.com/Jeoitim/paddle_pdf/releases) 下载最新版本的打包安装包（例如 `PaddlePDF_1.0.0_x64-setup.exe`）。
+2.  双击安装包，按照向导提示完成一键安装。
+3.  安装完成后，即可直接从桌面快捷方式双击启动 **PaddlePDF**。
 
 > 💡 **GPU 加速提示**：如果需要使用本地 NVIDIA 显卡进行 GPU 加速识别，请参见下方 [GPU 环境要求](#gpu-环境要求) 进行 CUDA 与 cuDNN 的简单配置。
 
----
+------------------------------------------------------------------------
 
 ### 2. 面向开发者（源码运行与二次开发）
 
 若您需要从源码调试、运行或参与开发，需要配置本地开发调试环境：
 
 - **前置依赖**：确保本地已安装 [Pixi](https://pixi.sh) 包管理器和 [pnpm](https://pnpm.io) 包管理器。
+
 - **环境搭建**：
-  ```bash
+
+  ``` bash
   # 1. 安装 Python 核心及基础依赖 (自动由 pixi 配置隔离环境)
   pixi install
 
@@ -52,59 +60,47 @@
   pixi run frontend-install
   ```
 
----
+------------------------------------------------------------------------
 
 ## 🚀 使用指南
 
 ### 1. 普通用户使用方式
 
 #### ▌ 方式 A：图形界面 (GUI) 模式
-直接双击桌面图标运行 **PaddlePDF**。
-- 支持拖拽 PDF 文件到界面中进行批量队列处理。
-- 可在软件中查看/下载 7 种语言的 OCR 识别模型，并查看系统 GPU 可用状态。
+
+直接双击桌面图标运行 **PaddlePDF**。 - 支持拖拽 PDF 文件到界面中进行批量队列处理。 - 可在软件中查看/下载 7 种语言的 OCR 识别模型，并查看系统 GPU 可用状态。
 
 #### ▌ 方式 B：命令行 (CLI) 模式（脱离 Python 环境）
-打包安装后，后台引擎 `paddle_pdf_backend.exe` 已经脱离了 Python 依赖。您可以直接在命令行（PowerShell 或 CMD）中将其作为独立的 CLI 工具调用。
-- **可执行文件默认路径**：
-  `C:\Users\<您的 Windows 用户名>\AppData\Local\PaddlePDF\resources\paddle_pdf_backend\paddle_pdf_backend.exe`
-- **使用示例**：
-  ```bash
-  # 1. 切换到引擎所在目录
-  cd "C:\Users\<您的 Windows 用户名>\AppData\Local\PaddlePDF\resources\paddle_pdf_backend"
 
-  # 2. 诊断本地 GPU / CUDA 环境
-  paddle_pdf_backend.exe --diagnose
+打包安装后，后台引擎 `paddle_pdf_backend.exe` 已经脱离了 Python 依赖。您可以直接在命令行（PowerShell 或 CMD）中将其作为独立的 CLI 工具调用。 - **可执行文件默认路径**： `C:\Users\<您的 Windows 用户名>\AppData\Local\PaddlePDF\resources\paddle_pdf_backend\paddle_pdf_backend.exe` - **使用示例**： \`\`\`bash \# 1. 切换到引擎所在目录 cd "C:\Users\<您的 Windows 用户名\>\AppData\Local\PaddlePDF\resources\paddle\_pdf_backend"
 
-  # 3. 列出所有可用的 OCR 模型
-  paddle_pdf_backend.exe --list-models
+\# 2. 诊断本地 GPU / CUDA 环境 paddle_pdf_backend.exe --diagnose
 
-  # 4. 运行 PDF 文本识别（默认 CPU 模式，结果输出在原 PDF 同级目录下）
-  paddle_pdf_backend.exe -i "D:\path\to\book.pdf"
+\# 3. 列出所有可用的 OCR 模型 paddle_pdf_backend.exe --list-models
 
-  # 5. 启用 GPU 加速 + 高精度模型识别
-  paddle_pdf_backend.exe -gpu -model ch_plus -i "D:\path\to\book.pdf"
-  ```
-- **命令行参数说明** 详见下表：
+\# 4. 运行 PDF 文本识别（默认 CPU 模式，结果输出在原 PDF 同级目录下） paddle_pdf_backend.exe -i "D:\path\to\book.pdf"
 
-| 参数              | 说明                                      | 默认                    |
-| --------------- | --------------------------------------- | --------------------- |
-| `-i, --input`   | **必填**，输入 PDF 文件的绝对/相对路径      | —                     |
-| `-gpu`          | 启用 GPU 加速（需本地已配置 CUDA）          | 关闭                    |
-| `-model <名称>`   | OCR 模型 (ch/ch_plus/ch_server_v2/en/...) | ch                    |
-| `-o <目录>`       | 输出目录                                    | `<输入文件名>_ocr_output/` |
-| `--max-pages N` | 最多处理页数                                  | 全部                    |
-| `--dpi N`       | 页面渲染分辨率 (高精度推荐 400)             | 300                   |
-| `--conf`        | 文本输出文件 (.txt) 包含置信度                 | 关闭                    |
-| `--list-models` | 列出所有可用模型并退出                         | —                     |
-| `--diagnose`    | 诊断本地 CUDA 和 GPU 状态                    | —                     |
-| `-v`            | 详细输出                                    | 关闭                    |
+\# 5. 启用 GPU 加速 + 高精度模型识别 paddle_pdf_backend.exe -gpu -model ch_plus -i "D:\path\to\book.pdf" \`\`\` - **命令行参数说明** 详见下表：
+
+| 参数 | 说明 | 默认 |
+|-----------------|------------------------------------|-------------------|
+| `-i, --input` | **必填**，输入 PDF 文件的绝对/相对路径 | — |
+| `-gpu` | 启用 GPU 加速（需本地已配置 CUDA） | 关闭 |
+| `-model <名称>` | OCR 模型 (ch/ch_plus/ch_server_v2/en/...) | ch |
+| `-o <目录>` | 输出目录 | `<输入文件名>_ocr_output/` |
+| `--max-pages N` | 最多处理页数 | 全部 |
+| `--dpi N` | 页面渲染分辨率 (高精度推荐 400) | 300 |
+| `--conf` | 文本输出文件 (.txt) 包含置信度 | 关闭 |
+| `--list-models` | 列出所有可用模型并退出 | — |
+| `--diagnose` | 诊断本地 CUDA 和 GPU 状态 | — |
+| `-v` | 详细输出 | 关闭 |
 
 ### 输出
 
-| 文件              | 说明              |
-| --------------- | --------------- |
+| 文件                  | 说明                      |
+|-----------------------|---------------------------|
 | `<文件名>_可搜索.pdf` | 带文字层 PDF，可搜索/复制 |
-| `<文件名>_文字.txt`  | 纯文本，默认不含置信度     |
+| `<文件名>_文字.txt`   | 纯文本，默认不含置信度    |
 
 ## GUI 核心功能
 
@@ -116,23 +112,23 @@
 - 📊 **结果展示**：页数、行数、置信度、耗时统计
 - 📂 **快捷操作**：一键打开输出文件/文件夹
 
-## GPU 环境要求
+## GPU 环境要求 {#gpu-环境要求}
 
 若需要 GPU 加速，用户需要在本地电脑上安装以下组件：
 
-| 组件           | 说明                  |
-| ------------ | ------------------- |
-| NVIDIA GPU   | RTX 3060+ (6GB+) 推荐 |
-| CUDA Toolkit | 12.x 或 11.x         |
-| cuDNN        | 需下载对应版本的 cuDNN，并将其 DLL 放入 CUDA Toolkit 的 `bin` 文件夹下或加入系统 PATH 中 |
+| 组件 | 说明 |
+|----------------------------|--------------------------------------------|
+| NVIDIA GPU | RTX 3060+ (6GB+) 推荐 |
+| CUDA Toolkit | 12.x 或 11.x |
+| cuDNN | 需下载对应版本的 cuDNN，并将其 DLL 放入 CUDA Toolkit 的 `bin` 文件夹下或加入系统 PATH 中 |
 
-```bash
+``` bash
 pixi run check-gpu  # 验证 GPU 环境
 ```
 
 ## 项目结构
 
-```
+```         
 paddle_pdf/
 ├── src/paddle_pdf/           # Python 后端（MVC 架构）
 ├── src/paddle_pdf/app/       #   应用入口
@@ -165,18 +161,18 @@ paddle_pdf/
 
 ## 技术栈
 
-| 层级       | 技术                                                |
-| -------- | ------------------------------------------------- |
-| 桌面壳      | [Tauri 2.x](https://tauri.app) (Rust)             |
-| 通信机制    | [FastAPI](https://fastapi.tiangolo.com/) + Uvicorn (HTTP / SSE 订阅) |
-| 前端框架     | [Vue 3](https://vuejs.org) + TypeScript            |
-| UI 组件    | [Naive UI](https://www.naiveui.com)                |
-| 构建工具     | [Vite](https://vitejs.dev) + [pnpm](https://pnpm.io) |
-| CSS      | [UnoCSS](https://unocss.dev)                       |
-| 状态管理     | [Pinia](https://pinia.vuejs.org)                   |
-| OCR 引擎   | [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) 3.4.1 |
-| PDF 处理   | [PyMuPDF](https://github.com/pymupdf/PyMuPDF)      |
-| 包管理      | [pixi](https://pixi.sh) (Python) + pnpm (Node)     |
+| 层级 | 技术 |
+|---------------|---------------------------------------------------------|
+| 桌面壳 | [Tauri 2.x](https://tauri.app) (Rust) |
+| 通信机制 | [FastAPI](https://fastapi.tiangolo.com/) + Uvicorn (HTTP / SSE 订阅) |
+| 前端框架 | [Vue 3](https://vuejs.org) + TypeScript |
+| UI 组件 | [Naive UI](https://www.naiveui.com) |
+| 构建工具 | [Vite](https://vitejs.dev) + [pnpm](https://pnpm.io) |
+| CSS | [UnoCSS](https://unocss.dev) |
+| 状态管理 | [Pinia](https://pinia.vuejs.org) |
+| OCR 引擎 | [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) 3.4.1 |
+| PDF 处理 | [PyMuPDF](https://github.com/pymupdf/PyMuPDF) |
+| 包管理 | [pixi](https://pixi.sh) (Python) + pnpm (Node) |
 
 ## 文档
 
