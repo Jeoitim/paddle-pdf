@@ -1,9 +1,9 @@
-# PaddlePDF - PDF OCR tool with GUI (pytauri)
+# PaddlePDF - PDF OCR tool with GUI
 
 [project]
 name = "paddle-pdf"
 version = "1.0.0"
-description = "PDF OCR tool powered by PaddleOCR — CLI and GUI via pytauri"
+description = "PDF OCR tool powered by PaddleOCR — CLI and Tauri GUI"
 requires-python = ">=3.10,<3.13"
 dependencies = [
     "paddlepaddle-gpu==3.3.0",
@@ -12,7 +12,6 @@ dependencies = [
     "pdf2image>=1.17.0",
     "Pillow>=10.0.0",
     "tqdm>=4.66.0",
-    "pytauri>=0.4",
 ]
 
 [project.scripts]

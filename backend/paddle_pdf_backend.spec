@@ -1,8 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_all
 
 SRC = str(Path(SPECPATH).parent / "src")
 HOOKS_DIR = str(Path(SPECPATH) / "hooks")
+
+# Auto-collect all dependencies, data files, and binaries for paddle libraries
+paddle_datas, paddle_binaries, paddle_hiddenimports = collect_all('paddle')
+ocr_datas, ocr_binaries, ocr_hiddenimports = collect_all('paddleocr')
+pdx_datas, pdx_binaries, pdx_hiddenimports = collect_all('paddlex')
 
 hiddenimports = [
     "uvicorn.logging","uvicorn.loops","uvicorn.loops.auto",
@@ -10,17 +16,11 @@ hiddenimports = [
     "uvicorn.protocols.websockets","uvicorn.protocols.websockets.auto",
     "uvicorn.lifespan","uvicorn.lifespan.on",
     "anyio","anyio._backends._asyncio",
-    # Paddle core — must be explicit to avoid circular import in frozen env
-    "paddle","paddle.fluid","paddle.base","paddle.tensor",
-    "paddle.nn","paddle.device","paddle.device.cuda",
-    "paddle.framework","paddle.static","paddle.jit",
-    "paddleocr","paddlex",
     "cv2","pymupdf","PIL","pydantic","pydantic_core",
     "fastapi","starlette","starlette.middleware.cors",
-    # Standard lib modules that paddle uses internally
     "unittest","unittest.mock","xmlrpc","xmlrpc.client",
     "distutils","distutils.version",
-]
+] + paddle_hiddenimports + ocr_hiddenimports + pdx_hiddenimports
 
 excludes = [
     "paddle.distributed","paddle.fluid.tests","paddle.base.tests",
@@ -35,8 +35,8 @@ excludes = [
 a = Analysis(
     [SRC + "/paddle_pdf/app/http_server.py"],
     pathex=[SRC],
-    binaries=[],
-    datas=[],
+    binaries=paddle_binaries + ocr_binaries + pdx_binaries,
+    datas=paddle_datas + ocr_datas + pdx_datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
