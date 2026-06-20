@@ -24,14 +24,14 @@
 
 ## 安装
 
-需要 [pixi](https://pixi.sh) 包管理器。
+需要 [pixi](https://pixi.sh) 包管理器和 [pnpm](https://pnpm.io)。
 
 ```bash
-# 基础安装（CLI）
+# 1. 安装 Python 后端及基础依赖 (自动由 pixi 管理)
 pixi install
 
-# 安装 GUI 依赖（含 pytauri）
-pixi install --environment gui
+# 2. 安装前端 Node.js 依赖
+pixi run frontend-install
 ```
 
 ## CLI 使用
@@ -40,7 +40,7 @@ pixi install --environment gui
 # CPU 模式
 pixi run run -- -i "book.pdf"
 
-# GPU 模式
+# GPU 模式（要求本地已配置 CUDA 与 cuDNN）
 pixi run run-gpu -- -i "book.pdf"
 
 # 高精度模型 + GPU
@@ -76,11 +76,25 @@ pixi run run -- --list-models
 
 ## GUI 使用
 
-```bash
-# 开发模式（热重载）
-pixi run tauri-dev
+### 开发模式（热重载）
 
-# 构建生产包
+在开发环境下，前端和后端服务需在两个终端窗口分别启动：
+
+```bash
+# 终端 1：启动 Python FastAPI 后端服务
+pixi run backend-dev
+
+# 终端 2：启动前端 GUI
+pixi run tauri-dev
+```
+
+### 生产打包
+
+```bash
+# 1. 编译 Python 后端为独立可执行文件
+pixi run build-backend
+
+# 2. 调用 Rust tauri build 构建 NSIS 安装包
 pixi run tauri-build
 ```
 
@@ -96,11 +110,13 @@ pixi run tauri-build
 
 ## GPU 环境要求
 
+若需要 GPU 加速，用户需要在本地电脑上安装以下组件：
+
 | 组件           | 说明                  |
 | ------------ | ------------------- |
 | NVIDIA GPU   | RTX 3060+ (6GB+) 推荐 |
-| CUDA Toolkit | 11.x 或 12.x         |
-| cuDNN        | 需单独安装               |
+| CUDA Toolkit | 12.x 或 11.x         |
+| cuDNN        | 需下载对应版本的 cuDNN，并将其 DLL 放入 CUDA Toolkit 的 `bin` 文件夹下或加入系统 PATH 中 |
 
 ```bash
 pixi run check-gpu  # 验证 GPU 环境
@@ -111,36 +127,31 @@ pixi run check-gpu  # 验证 GPU 环境
 ```
 paddle_pdf/
 ├── src/paddle_pdf/           # Python 后端（MVC 架构）
-│   ├── core/                 #   核心业务逻辑（无 UI 依赖）
-│   │   ├── ocr_engine.py     #     PaddleOCR 引擎封装
-│   │   ├── pdf_pipeline.py   #     PDF 处理管线
-│   │   ├── models.py         #     模型注册表
-│   │   └── gpu_utils.py      #     CUDA 检测
-│   ├── service/              #   服务层（编排核心逻辑）
-│   │   ├── ocr_service.py    #     OCR 任务编排
-│   │   ├── task_queue.py     #     后台任务队列
-│   │   ├── model_service.py  #     模型管理
-│   │   └── system_service.py #     系统诊断
-│   ├── controller/           #   控制器层（协议适配）
-│   │   ├── cli_controller.py #     argparse CLI
-│   │   └── ipc_controller.py #     pytauri IPC 端点
-│   ├── common/               #   公共定义
-│   │   ├── schemas.py        #     数据结构
-│   │   ├── events.py         #     事件常量
-│   │   └── config.py         #     全局配置
-│   └── app/                  #   应用入口
-│       ├── cli_app.py        #     CLI 入口
-│       └── pytauri_app.py    #     GUI 入口
+├── src/paddle_pdf/app/       #   应用入口
+│   ├── cli_app.py            #     CLI 启动入口
+│   └── http_server.py        #     FastAPI Web 服务端入口
+├── src/paddle_pdf/controller/#   控制器层（协议适配）
+│   └── cli_controller.py     #     argparse CLI 参数解析器
+├── src/paddle_pdf/core/      #   核心业务逻辑（无 UI 依赖）
+│   ├── ocr_engine.py         #     PaddleOCR 引擎封装与模型选择
+│   ├── pdf_pipeline.py       #     PDF 处理管线（图片渲染、隐式 PDF 生成）
+│   ├── models.py             #     模型注册表
+│   └── gpu_utils.py          #     CUDA 检测与环境变量设置
+├── src/paddle_pdf/service/   #   服务层（编排核心逻辑）
+│   ├── ocr_service.py        #     OCR 任务编排
+│   ├── task_queue.py         #     后台异步任务队列
+│   ├── model_service.py      #     模型文件下载与管理
+│   └── system_service.py     #     GPU 状态诊断
 ├── src-frontend/             # Vue 3 前端
 │   ├── src/
-│   │   ├── views/            #     页面组件
-│   │   ├── components/       #     可复用组件
+│   │   ├── views/            #     GUI 视图模块
 │   │   ├── stores/           #     Pinia 状态管理
-│   │   ├── composables/      #     组合式函数
-│   │   └── types/            #     TypeScript 类型
-│   └── src-tauri/            #     Tauri Rust 壳
-├── doc/                      # 文档
-├── pixi.toml                 # Python 依赖配置
+│   │   └── composables/      #     useIpc.ts (通过 HTTP/SSE 轮询和订阅事件)
+│   └── src-tauri/            #     Tauri Rust 进程壳
+│       ├── src/main.rs       #       主入口（拉起 Python 后端 Sidecar 并读取空闲端口）
+│       └── tauri.conf.json   #       Tauri 配置（设置打包资源拷贝路径）
+├── doc/                      # 项目文档
+├── pixi.toml                 # Pixi Python + Node 依赖环境配置
 └── README.md
 ```
 
@@ -149,7 +160,7 @@ paddle_pdf/
 | 层级       | 技术                                                |
 | -------- | ------------------------------------------------- |
 | 桌面壳      | [Tauri 2.x](https://tauri.app) (Rust)             |
-| Python 桥 | [pytauri](https://github.com/pytauri/pytauri)      |
+| 通信机制    | [FastAPI](https://fastapi.tiangolo.com/) + Uvicorn (HTTP / SSE 订阅) |
 | 前端框架     | [Vue 3](https://vuejs.org) + TypeScript            |
 | UI 组件    | [Naive UI](https://www.naiveui.com)                |
 | 构建工具     | [Vite](https://vitejs.dev) + [pnpm](https://pnpm.io) |

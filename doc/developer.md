@@ -2,14 +2,14 @@
 
 ## 项目概述
 
-基于 PaddleOCR 的 PDF 文字识别工具，支持 **CLI 命令行** 和 **GUI 图形界面** 两种使用方式。GUI 基于 pytauri（Python + Tauri + Vue 3）实现跨平台桌面应用。
+基于 PaddleOCR 的 PDF 文字识别工具，支持 **CLI 命令行** 和 **GUI 图形界面** 两种使用方式。GUI 采用 FastAPI + Uvicorn 作为 Python 后端 Sidecar，前端通过 Tauri + Vue 3 渲染，并通过 HTTP 协议与 SSE 事件流实现前后端松耦合通信。
 
 ## 技术栈
 
 | 层级 | 技术 | 版本 |
 |------|------|------|
 | 桌面壳 | Tauri | 2.11 |
-| Python 桥 | pytauri | 0.4 |
+| 通信机制 | FastAPI + Uvicorn (HTTP / SSE) | 0.115+ / 0.34+ |
 | 前端框架 | Vue 3 + TypeScript | 3.5 |
 | UI 组件库 | Naive UI | 2.44 |
 | 构建工具 | Vite | 8.0 |
@@ -37,15 +37,14 @@ paddle_pdf/
 │   │   ├── model_service.py  #     模型管理
 │   │   └── system_service.py #     系统诊断
 │   ├── controller/           #   Controller — 协议适配层
-│   │   ├── cli_controller.py #     argparse CLI
-│   │   └── ipc_controller.py #     pytauri IPC 端点 (14 个命令)
+│   │   └── cli_controller.py #     argparse CLI 参数解析
 │   ├── common/               #   公共定义
 │   │   ├── schemas.py        #     dataclass 数据结构
-│   │   ├── events.py         #     IPC 事件常量
+│   │   ├── events.py         #     通信事件常量
 │   │   └── config.py         #     全局配置
 │   └── app/                  #   应用入口
 │       ├── cli_app.py        #     CLI 入口
-│       └── pytauri_app.py    #     GUI 入口 (pytauri)
+│       └── http_server.py    #     FastAPI Web 服务端入口 (Sidecar)
 │
 ├── src-frontend/             # Vue 3 前端
 │   ├── src/
@@ -53,90 +52,59 @@ paddle_pdf/
 │   │   ├── components/       #     FileDropZone, TaskCard, TaskProgress,
 │   │   │                     #     ModelSelector, GpuStatus, TextPanel
 │   │   ├── stores/           #     Pinia: task, settings, app
-│   │   ├── composables/      #     useIpc, useTask, useModels
+│   │   ├── composables/      #     useIpc (HTTP/SSE 封装), useTask, useModels
 │   │   └── types/            #     TypeScript 类型定义
 │   └── src-tauri/            #     Tauri Rust 壳
-│       ├── src/lib.rs        #       pytauri 扩展模块 (pymodule_export)
-│       ├── src/main.rs       #       Python 嵌入入口 (PythonInterpreterBuilder)
-│       └── tauri.conf.json   #       Tauri 配置
+│       ├── src/main.rs       #       主入口 (拉起 Sidecar，读取空闲端口)
+│       └── tauri.conf.json   #       Tauri 资源拷贝与打包配置
 │
 ├── doc/                      # 文档
-├── pixi.toml                 # Python + Node 依赖
+├── pixi.toml                 # Python + Node 依赖管理
 └── README.md
 ```
 
-## pytauri 架构详解
+## FastAPI Sidecar 架构与前后端通信
 
-### IPC 通信流程
+### 通信流程
 
 ```
-┌─────────────────┐     pyInvoke("cmd", body)     ┌──────────────────┐
-│  Vue Frontend   │ ─────────────────────────────→ │  Tauri Plugin    │
-│  (useIpc.ts)    │                                │  (pyfunc handler)│
-│                 │ ← ─ ─ Emitter.emit(event) ─ ─ ─│                  │
-└─────────────────┘                                └──────────────────┘
-                                                          │
-                                                    invoke_handler
-                                                          ↓
-                                                   ┌──────────────┐
-                                                   │  pytauri      │
-                                                   │  Commands     │
-                                                   │  (Python)     │
-                                                   └──────────────┘
-                                                          │
-                                                          ↓
-                                                   ┌──────────────┐
-                                                   │  Service 层   │
-                                                   │  Core 层      │
-                                                   └──────────────┘
+┌─────────────────┐       HTTP 请求 (GET / POST)       ┌──────────────────┐
+│  Vue Frontend   │ ─────────────────────────────────→ │  FastAPI Backend │
+│  (useIpc.ts)    │                                    │  (Uvicorn)       │
+│                 │ ← ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─  └──────────────────┘
+└─────────────────┘      Server-Sent Events (SSE)               │
+                                                                │
+                                                         路由与后台任务
+                                                                ↓
+                                                       ┌──────────────┐
+                                                       │  Service 层   │
+                                                       │  Core 层      │
+                                                       └──────────────┘
 ```
 
 ### 关键实现细节
 
-1. **Rust `lib.rs`**：通过 `pytauri::pymodule_export` 创建 Python 扩展模块，导出 `context_factory` 和 `builder_factory`
-2. **Rust `main.rs`**：使用 `PythonInterpreterBuilder` (standalone 模式) 嵌入 Python 解释器，运行入口模块
-3. **Python `pytauri_app.py`**：使用 `Commands` 注册 IPC 命令，通过 `BlockingPortal` 异步处理
-4. **前端 `useIpc.ts`**：使用 `pyInvoke` (来自 `tauri-plugin-pytauri-api`) 而非原生 `invoke`
-5. **pytauri 命令签名**：`async def cmd(body: BaseModel) -> BaseModel | bytes`，`body` 和 `app_handle` 是特殊参数名
+1. **子进程拉起与生命周期管理** (`src-frontend/src-tauri/src/main.rs`)：
+   - Tauri 主进程在初始化阶段 (`setup` hook) 启动 Python 后端进程。
+   - 开发模式下，优先检测并拉起 `backend/dist/paddle_pdf_backend/paddle_pdf_backend.exe`。若不存在，则使用 pixi 环境中的 `python.exe` 启动 `-m paddle_pdf.app.http_server` 并设置 `PYTHONPATH`。
+   - 生产打包模式下，Tauri 从资源目录中找到并启动打包好的 `paddle_pdf_backend.exe`。
+2. **动态端口握手与服务发现**：
+   - Python 后端绑定 `127.0.0.1` 上的一个随机空闲端口（通过 `socket.bind(("", 0))` 获取），并在启动时向 stdout 打印一行 `PADDLE_PDF_PORT=<port>`。
+   - Rust 主进程拦截该 stdout 管道，利用 `BufReader` 行读取解析出该动态端口，并将其缓存在 Tauri 的 `BackendState` 中。
+   - 前端在首次请求前，通过 Tauri Native Command `get_backend_port` 获得缓存端口，随后建立与其的本地 HTTP 和 SSE 通信。
+3. **孤儿进程自动清理** (PID 监视器)：
+   - 为了防止 Tauri 前端崩溃或被强制结束时，后台 Python 进程残留在系统中，Rust 端在拉起子进程时会注入环境变量 `PADDLE_PDF_PARENT_PID=<parent_pid>`。
+   - Python 后端 (`http_server.py`) 启动一个守护线程检测父进程的存活状态（在 Windows 下利用 `OpenProcess` 与 `GetExitCodeProcess` 检查 `STILL_ACTIVE`，Unix 下通过 `os.kill(pid, 0)` 检查）。一旦发现父进程退出，立即调用 `os._exit(0)` 进行自我清理。
 
-### 命令注册规范
+### API 请求与 SSE 事件总览
 
-```python
-from pytauri import Commands, AppHandle, Emitter
-from pydantic import BaseModel
+1. **API 调用** (`useIpc.ts`)：
+   - 前端通过 `ipcInvoke(command, args)` 将方法名映射至 HTTP endpoint（例如 `process_task` 映射为 `POST /process_task`），通过 `fetch` 发送标准 HTTP 请求并解析返回的 JSON。
+2. **事件推送**：
+   - 服务端配置了 `/events` 路由，前端使用 HTML5 `EventSource` 订阅该长连接以接收 SSE 推送。
+   - 后台任务产生的各种状态（如进度更新、任务完成、失败、模型下载进度等）通过 Python 的异步事件队列广播至所有 SSE 客户端。
 
-commands = Commands()
-
-class MyRequest(BaseModel):
-    name: str
-
-class MyResponse(BaseModel):
-    message: str
-
-@commands.command()
-async def my_command(body: MyRequest) -> MyResponse:
-    return MyResponse(message=f"Hello {body.name}")
-
-# 无参数命令用 EmptyBody
-class EmptyBody(BaseModel): pass
-
-@commands.command()
-async def no_args(body: EmptyBody) -> bytes:
-    return b"ok"
-
-# 需要 emit 事件的命令加 app_handle 参数
-@commands.command()
-async def with_progress(body: MyRequest, app_handle: AppHandle) -> MyResponse:
-    Emitter.emit(app_handle, "progress", ProgressPayload(...))
-    return MyResponse(message="done")
-```
-
-### 注意事项
-
-- **不要使用 `from __future__ import annotations`**：pytauri 的 `wrap_pyfunc` 需要运行时类型注解做 `issubclass` 检查
-- **`app_handle` 参数类型必须是 `AppHandle`**：不能用 `Any`
-- **返回 `bytes` 的命令**：前端收到的是原始 bytes，需手动 JSON.parse
-- **`PYTHONPATH` 必须包含 `src/` 目录**：在 pixi.toml 的 tauri tasks 中通过 env 设置
+---
 
 ## 任务队列架构 (TaskQueue)
 
@@ -147,7 +115,7 @@ async def with_progress(body: MyRequest, app_handle: AppHandle) -> MyResponse:
 - **异步提交**：`add_task()` 立即返回，任务在后台线程执行
 - **顺序处理**：`max_workers=1`（默认），GPU 显存通常不允许并发加载多个模型
 - **任务隔离**：每个任务拥有独立的 `OcrService` 实例，模型状态互不干扰
-- **回调机制**：通过 4 种回调（progress/completion/failure/cancel）将事件路由到前端
+- **回调机制**：通过 4 种回调（progress/completion/failure/cancel）触发 SSE 事件广播至前端
 
 ### 核心类
 
@@ -160,25 +128,28 @@ TaskQueue
 └── _lock: threading.Lock            # 线程安全锁
 ```
 
-### IPC 事件流
+### Sidecar 通信事件流
 
 ```
-Backend TaskQueue                    Frontend (useTask.ts)
-─────────────────                    ──────────────────────
-progress_callback(task_id, tp)  ──→  task://progress → store.updateProgress
-completion_callback(task_id, r) ──→  task://completed → store.completeTask
-failure_callback(task_id, err)  ──→  task://failed → store.failTask
-cancel_callback(task_id)        ──→  task://cancelled → store.cancelTask
+Backend TaskQueue                    FastAPI /events (SSE)              Frontend (useTask.ts)
+─────────────────                    ─────────────────────              ──────────────────────
+progress_callback(task_id, tp)  ──→  SSE [task://progress]        ──→   store.updateProgress
+completion_callback(task_id, r) ──→  SSE [task://completed]       ──→   store.completeTask
+failure_callback(task_id, err)  ──→  SSE [task://failed]          ──→   store.failTask
+cancel_callback(task_id)        ──→  SSE [task://cancelled]       ──→   store.cancelTask
 ```
 
-### IPC 命令总览
+### Sidecar HTTP API 路由总览
 
-| 命令 | 说明 | 返回 |
-|---|---|---|
-| `process_task` | 提交任务到队列（立即返回） | `SimpleResponse` |
-| `cancel_task` | 取消指定任务 | `SimpleResponse` |
-| `get_queue_status` | 获取所有任务状态快照 | `bytes` (JSON) |
-| `remove_task` | 移除已完成/失败/取消的任务 | `SimpleResponse` |
+| 接口 | 方法 | 说明 | 返回 |
+|---|---|---|---|
+| `/process_task` | `POST` | 提交任务到队列（立即返回） | `SimpleResponse` |
+| `/cancel_task` | `POST` | 取消指定任务 | `SimpleResponse` |
+| `/queue_status` | `GET` | 获取所有任务状态快照 | `list[TaskStatus]` |
+| `/remove_task` | `POST` | 移除已完成/失败/取消的任务 | `SimpleResponse` |
+| `/list_models` | `GET` | 获取可用 OCR 模型列表 | `list[ModelInfo]` |
+| `/download_model`| `POST` | 触发后台下载模型 | `SimpleResponse` |
+| `/check_gpu` | `GET` | 系统 GPU/CUDA 状态诊断 | `GpuInfo` |
 
 ### 前端任务 Store
 
@@ -191,15 +162,16 @@ Pinia `task` store 维护任务列表，通过 computed 属性分片：
 
 ### 前端事件监听
 
-`useTask` composable 在首次调用时注册全局事件监听器（`ensureListeners()`），通过 `task_id` 路由事件到对应任务：
+`useTask` composable 在首次调用时通过 `ipcListen` 注册 SSE 事件监听，通过 `task_id` 路由事件到对应任务：
 
 ```typescript
 ipcListen<TaskProgress>('task://progress', (progress) => {
   store.updateProgress(progress.task_id, progress)
 })
 ipcListen<TaskCompletedEvent>('task://completed', (payload) => {
-  store.completeTask(payload.task_id, result)
+  store.completeTask(payload.task_id, payload)
 })
+```
 ```
 
 ## PaddleOCR 3.x API 关键差异
@@ -272,11 +244,10 @@ pixi run check-gpu
 | `Unknown argument: use_gpu` | PaddleOCR 3.x 已删除该参数 | 改用 `paddle.device.set_device()` |
 | `Unknown argument: use_angle_cls` | 参数被重命名 | 改为 `use_textline_orientation=True` |
 | `not enough values to unpack bbox` | Bbox 是 4 点多边形 | 用 `np.array(bbox)` 提取 min/max |
-| `issubclass() arg 1 must be a class` | 使用了 `from __future__ import annotations` | 删除该导入，使用 Python 3.12 原生注解 |
-| `Command X not found` | 前端用了 `invoke` 而非 `pyInvoke` | 使用 `tauri-plugin-pytauri-api` 的 `pyInvoke` |
-| `pytauri.pyfunc not allowed` | Tauri 权限未配置 | 在 capabilities 中添加 `pytauri:default` |
-| `No module named 'paddle_pdf'` | PYTHONPATH 未设置 | pixi.toml 中 tauri tasks 设置 `PYTHONPATH = "../src"` |
-| PyO3 不支持 Python 3.14 | 系统 Python 版本过新 | 使用 pixi 的 Python 3.12，设置 `PYO3_PYTHON` |
+| `partially initialized module 'paddle' has no attribute 'tensor' (circular import)` | 打包后 Python 环境初始化顺序问题导致的循环导入 | 在 PyInstaller 运行时钩子 `rth_paddle.py` 中，在最开始显式导入 `paddle.base` 与 `paddle.tensor` |
+| `No module named 'unittest'` (或 `importlib.metadata.PackageNotFoundError`) | 打包为单文件/独立目录后，`.dist-info` 丢失，Paddlex 等检测 cv2 等依赖版本失败 | 在 `rth_paddle.py` 中 monkeypatch `importlib.metadata.version`，检测到若对应包实际可被 import，则返回虚拟版本号（如 opencv 返回 `4.10.0.84`） |
+| 打包版 GPU 检测为 False / 找不到 CUDA DLL | 打包未包含体积巨大的 NVIDIA 依赖包；系统无法通过 PATH 找到本地显卡 CUDA 安装 | 确保本地安装了 CUDA Toolkit 12.x 及 cuDNN，并将其 bin/ 目录加入 PATH；打包版会通过 `rth_paddle.py` 扫描注册表/默认路径并调用 `os.add_dll_directory` 动态加载 |
+| `No module named 'paddle_pdf'` | PYTHONPATH 未设置 | pixi.toml 中 tauri tasks 设置 `PYTHONPATH = "../src"` 或使用正确的 python 运行命令 |
 
 ## 已知限制
 

@@ -24,14 +24,14 @@ A PDF text recognition tool based on PaddleOCR, supporting both **CLI** and **GU
 
 ## Installation
 
-Requires the [pixi](https://pixi.sh) package manager.
+Requires the [pixi](https://pixi.sh) package manager and [pnpm](https://pnpm.io).
 
 ```bash
-# Basic install (CLI)
+# 1. Install Python backend and basic dependencies (automatically managed by pixi)
 pixi install
 
-# Install GUI dependencies (includes pytauri)
-pixi install --environment gui
+# 2. Install frontend Node.js dependencies
+pixi run frontend-install
 ```
 
 ## CLI Usage
@@ -76,11 +76,25 @@ pixi run run -- --list-models
 
 ## GUI Usage
 
-```bash
-# Development mode (hot reload)
-pixi run tauri-dev
+### Development Mode (Hot Reload)
 
-# Production build
+In the development environment, the frontend and backend services must be started in two separate terminal windows:
+
+```bash
+# Terminal 1: Start the Python FastAPI backend service
+pixi run backend-dev
+
+# Terminal 2: Start the frontend GUI
+pixi run tauri-dev
+```
+
+### Production Packaging
+
+```bash
+# 1. Compile the Python backend into a standalone executable
+pixi run build-backend
+
+# 2. Invoke Rust tauri build to construct the NSIS installer
 pixi run tauri-build
 ```
 
@@ -122,25 +136,24 @@ paddle_pdf/
 │   │   ├── model_service.py  #     Model management
 │   │   └── system_service.py #     System diagnostics
 │   ├── controller/           #   Controller layer (protocol adapters)
-│   │   ├── cli_controller.py #     argparse CLI
-│   │   └── ipc_controller.py #     pytauri IPC endpoints
+│   │   └── cli_controller.py #     argparse CLI parameter parsing
 │   ├── common/               #   Shared definitions
 │   │   ├── schemas.py        #     Data structures
-│   │   ├── events.py         #     Event constants
+│   │   ├── events.py         #     Communication event constants
 │   │   └── config.py         #     Global config
 │   └── app/                  #   App entry points
 │       ├── cli_app.py        #     CLI entry
-│       └── pytauri_app.py    #     GUI entry
+│       └── http_server.py    #     FastAPI Web server entry (Sidecar)
 ├── src-frontend/             # Vue 3 frontend
 │   ├── src/
-│   │   ├── views/            #     Page components
-│   │   ├── components/       #     Reusable components
+│   │   ├── views/            #     Page views
 │   │   ├── stores/           #     Pinia state management
-│   │   ├── composables/      #     Composable functions
-│   │   └── types/            #     TypeScript types
+│   │   └── composables/      #     useIpc.ts (via HTTP and SSE events)
 │   └── src-tauri/            #     Tauri Rust shell
+│       ├── src/main.rs       #       Main entry (spawns backend sidecar and parses dynamic port)
+│       └── tauri.conf.json   #       Tauri configuration (sets bundled resource copies)
 ├── doc/                      # Documentation
-├── pixi.toml                 # Python dependencies config
+├── pixi.toml                 # Pixi Python + Node environment configuration
 └── README.md
 ```
 
@@ -149,7 +162,7 @@ paddle_pdf/
 | Layer | Technology |
 |---|---|
 | Desktop Shell | [Tauri 2.x](https://tauri.app) (Rust) |
-| Python Bridge | [pytauri](https://github.com/pytauri/pytauri) |
+| Communication | [FastAPI](https://fastapi.tiangolo.com/) + Uvicorn (HTTP / SSE subscription) |
 | Frontend Framework | [Vue 3](https://vuejs.org) + TypeScript |
 | UI Components | [Naive UI](https://www.naiveui.com) |
 | Build Tools | [Vite](https://vitejs.dev) + [pnpm](https://pnpm.io) |

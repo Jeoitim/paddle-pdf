@@ -2,14 +2,14 @@
 
 ## Project Overview
 
-A PDF text recognition tool based on PaddleOCR, supporting both **CLI** and **GUI** modes. The GUI is built with pytauri (Python + Tauri + Vue 3) for cross-platform desktop applications.
+A PDF text recognition tool based on PaddleOCR, supporting both **CLI** and **GUI** modes. The GUI uses FastAPI + Uvicorn as a Python backend sidecar, with the frontend rendered by Tauri + Vue 3, communicating loosely coupled via HTTP and Server-Sent Events (SSE) streams.
 
 ## Tech Stack
 
 | Layer | Technology | Version |
 |---|---|---|
 | Desktop Shell | Tauri | 2.11 |
-| Python Bridge | pytauri | 0.4 |
+| Communication | FastAPI + Uvicorn (HTTP / SSE) | 0.115+ / 0.34+ |
 | Frontend Framework | Vue 3 + TypeScript | 3.5 |
 | UI Components | Naive UI | 2.44 |
 | Build Tools | Vite | 8.0 |
@@ -37,15 +37,14 @@ paddle_pdf/
 │   │   ├── model_service.py  #     Model management
 │   │   └── system_service.py #     System diagnostics
 │   ├── controller/           #   Controller — protocol adapter layer
-│   │   ├── cli_controller.py #     argparse CLI
-│   │   └── ipc_controller.py #     pytauri IPC endpoints (14 commands)
+│   │   └── cli_controller.py #     argparse CLI parameter parsing
 │   ├── common/               #   Shared definitions
 │   │   ├── schemas.py        #     dataclass data structures
-│   │   ├── events.py         #     IPC event constants
+│   │   ├── events.py         #     Communication event constants
 │   │   └── config.py         #     Global config
 │   └── app/                  #   App entry points
 │       ├── cli_app.py        #     CLI entry
-│       └── pytauri_app.py    #     GUI entry (pytauri)
+│       └── http_server.py    #     FastAPI Web server entry (Sidecar)
 │
 ├── src-frontend/             # Vue 3 frontend
 │   ├── src/
@@ -53,90 +52,59 @@ paddle_pdf/
 │   │   ├── components/       #     FileDropZone, TaskCard, TaskProgress,
 │   │   │                     #     ModelSelector, GpuStatus, TextPanel
 │   │   ├── stores/           #     Pinia: task, settings, app
-│   │   ├── composables/      #     useIpc, useTask, useModels
+│   │   ├── composables/      #     useIpc (HTTP/SSE wrappers), useTask, useModels
 │   │   └── types/            #     TypeScript type definitions
 │   └── src-tauri/            #     Tauri Rust shell
-│       ├── src/lib.rs        #       pytauri extension module (pymodule_export)
-│       ├── src/main.rs       #       Python embedding entry (PythonInterpreterBuilder)
-│       └── tauri.conf.json   #       Tauri config
+│       ├── src/main.rs       #       Main entry (spawns Sidecar, reads free port)
+│       └── tauri.conf.json   #       Tauri configuration (resource copying and packaging)
 │
 ├── doc/                      # Documentation
-├── pixi.toml                 # Python + Node dependencies
+├── pixi.toml                 # Python + Node dependency management
 └── README.md
 ```
 
-## pytauri Architecture Deep Dive
+## FastAPI Sidecar Architecture & Communication
 
-### IPC Communication Flow
+### Communication Flow
 
 ```
-┌─────────────────┐     pyInvoke("cmd", body)     ┌──────────────────┐
-│  Vue Frontend   │ ─────────────────────────────→ │  Tauri Plugin    │
-│  (useIpc.ts)    │                                │  (pyfunc handler)│
-│                 │ ← ─ ─ Emitter.emit(event) ─ ─ ─│                  │
-└─────────────────┘                                └──────────────────┘
-                                                          │
-                                                    invoke_handler
-                                                          ↓
-                                                   ┌──────────────┐
-                                                   │  pytauri      │
-                                                   │  Commands     │
-                                                   │  (Python)     │
-                                                   └──────────────┘
-                                                          │
-                                                          ↓
-                                                   ┌──────────────┐
-                                                   │  Service Layer│
-                                                   │  Core Layer   │
-                                                   └──────────────┘
+┌─────────────────┐       HTTP Request (GET / POST)      ┌──────────────────┐
+│  Vue Frontend   │ ───────────────────────────────────→ │  FastAPI Backend │
+│  (useIpc.ts)    │                                      │  (Uvicorn)       │
+│                 │ ← ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─  └──────────────────┘
+└─────────────────┘      Server-Sent Events (SSE)                 │
+                                                                  │
+                                                           Routes & Tasks
+                                                                  ↓
+                                                         ┌──────────────┐
+                                                         │  Service Lyr │
+                                                         │  Core Layer  │
+                                                         └──────────────┘
 ```
 
 ### Key Implementation Details
 
-1. **Rust `lib.rs`**: Creates a Python extension module via `pytauri::pymodule_export`, exporting `context_factory` and `builder_factory`
-2. **Rust `main.rs`**: Uses `PythonInterpreterBuilder` (standalone mode) to embed a Python interpreter and run the entry module
-3. **Python `pytauri_app.py`**: Registers IPC commands via `Commands`, processes asynchronously through `BlockingPortal`
-4. **Frontend `useIpc.ts`**: Uses `pyInvoke` (from `tauri-plugin-pytauri-api`) instead of native `invoke`
-5. **pytauri command signature**: `async def cmd(body: BaseModel) -> BaseModel | bytes`, where `body` and `app_handle` are special parameter names
+1. **Process Spawning & Lifecycle Management** (`src-frontend/src-tauri/src/main.rs`):
+   - The Tauri main process spawns the Python backend process during its initialization (`setup` hook).
+   - In development mode, it checks for a compiled dev backend executable (`backend/dist/paddle_pdf_backend/paddle_pdf_backend.exe`). If not found, it runs the pixi environment Python (`python.exe` executing `-m paddle_pdf.app.http_server`) with `PYTHONPATH` pointing to the workspace root.
+   - In production packaging, Tauri resolves the sidecar from its bundled resource directory and launches `paddle_pdf_backend.exe`.
+2. **Dynamic Port Handshake & Service Discovery**:
+   - The Python backend binds to a random free port on local loopback `127.0.0.1` (obtained via `socket.bind(("", 0))`) and outputs `PADDLE_PDF_PORT=<port>` to standard output (stdout) at startup.
+   - The Rust Tauri process intercepts the sidecar process's stdout, parses this line via a `BufReader`, and stores the port in Tauri's application state (`BackendState`).
+   - The frontend calls the Tauri command `get_backend_port` to obtain the port, then communicates via standard HTTP and SSE.
+3. **Orphan Process Auto-Cleanup (PID Watcher)**:
+   - To prevent the Python backend process from remaining in memory if the Tauri frontend crashes or is force-killed, Rust passes the Tauri process ID via the `PADDLE_PDF_PARENT_PID=<parent_pid>` environment variable.
+   - The Python backend (`http_server.py`) spawns a background watcher daemon thread that periodically checks the health of the parent PID (on Windows using `OpenProcess` with `GetExitCodeProcess` looking for `STILL_ACTIVE`; on Unix via `os.kill(pid, 0)`). If the parent process is dead, the sidecar invokes `os._exit(0)` to self-terminate.
 
-### Command Registration Conventions
+### HTTP Routes & SSE Event Bus
 
-```python
-from pytauri import Commands, AppHandle, Emitter
-from pydantic import BaseModel
+1. **API Invocation** (`useIpc.ts`):
+   - The frontend maps commands to HTTP endpoints (e.g., `process_task` maps to `POST /process_task`) and calls them via standard HTTP GET or POST requests using `fetch`.
+2. **Push Event Streams**:
+   - The backend exposes a `/events` endpoint that supports Server-Sent Events (SSE). The frontend establishes a persistent connection using HTML5 `EventSource` to subscribe to updates.
+   - Task execution status (progress, completion, failures, model downloads) is pushed to all connected SSE clients via an asynchronous event queue.
 
-commands = Commands()
-
-class MyRequest(BaseModel):
-    name: str
-
-class MyResponse(BaseModel):
-    message: str
-
-@commands.command()
-async def my_command(body: MyRequest) -> MyResponse:
-    return MyResponse(message=f"Hello {body.name}")
-
-# Commands with no arguments use EmptyBody
-class EmptyBody(BaseModel): pass
-
-@commands.command()
-async def no_args(body: EmptyBody) -> bytes:
-    return b"ok"
-
-# Commands that emit events add an app_handle parameter
-@commands.command()
-async def with_progress(body: MyRequest, app_handle: AppHandle) -> MyResponse:
-    Emitter.emit(app_handle, "progress", ProgressPayload(...))
-    return MyResponse(message="done")
-```
-
-### Important Notes
-
-- **Do NOT use `from __future__ import annotations`**: pytauri's `wrap_pyfunc` needs runtime type annotations for `issubclass` checks
-- **`app_handle` parameter type must be `AppHandle`**: Cannot use `Any`
-- **Commands returning `bytes`**: The frontend receives raw bytes and must manually `JSON.parse`
-- **`PYTHONPATH` must include the `src/` directory**: Set via env in pixi.toml's tauri tasks
+---
 
 ## Task Queue Architecture (TaskQueue)
 
@@ -147,7 +115,7 @@ async def with_progress(body: MyRequest, app_handle: AppHandle) -> MyResponse:
 - **Async submission**: `add_task()` returns immediately; the task runs in a background thread
 - **Sequential processing**: `max_workers=1` (default), as GPU memory rarely allows concurrent models
 - **Task isolation**: Each task gets its own `OcrService` instance — model state never leaks between tasks
-- **Callback mechanism**: 4 callback types (progress/completion/failure/cancel) route events to the frontend
+- **Callback mechanism**: 4 callback types (progress/completion/failure/cancel) trigger SSE events to the frontend
 
 ### Core Classes
 
@@ -160,25 +128,28 @@ TaskQueue
 └── _lock: threading.Lock            # Thread-safety lock
 ```
 
-### IPC Event Flow
+### Sidecar Communication Event Flow
 
 ```
-Backend TaskQueue                    Frontend (useTask.ts)
-─────────────────                    ──────────────────────
-progress_callback(task_id, tp)  ──→  task://progress → store.updateProgress
-completion_callback(task_id, r) ──→  task://completed → store.completeTask
-failure_callback(task_id, err)  ──→  task://failed → store.failTask
-cancel_callback(task_id)        ──→  task://cancelled → store.cancelTask
+Backend TaskQueue                    FastAPI /events (SSE)              Frontend (useTask.ts)
+─────────────────                    ─────────────────────              ──────────────────────
+progress_callback(task_id, tp)  ──→  SSE [task://progress]        ──→   store.updateProgress
+completion_callback(task_id, r) ──→  SSE [task://completed]       ──→   store.completeTask
+failure_callback(task_id, err)  ──→  SSE [task://failed]          ──→   store.failTask
+cancel_callback(task_id)        ──→  SSE [task://cancelled]       ──→   store.cancelTask
 ```
 
-### IPC Command Summary
+### Sidecar HTTP API Routes
 
-| Command | Description | Returns |
-|---|---|---|
-| `process_task` | Submit task to queue (returns immediately) | `SimpleResponse` |
-| `cancel_task` | Cancel a specific task | `SimpleResponse` |
-| `get_queue_status` | Get snapshot of all task statuses | `bytes` (JSON) |
-| `remove_task` | Remove a completed/failed/cancelled task | `SimpleResponse` |
+| Endpoint | Method | Description | Returns |
+|---|---|---|---|
+| `/process_task` | `POST` | Submit task to queue (returns immediately) | `SimpleResponse` |
+| `/cancel_task` | `POST` | Cancel a specific task | `SimpleResponse` |
+| `/queue_status` | `GET` | Get snapshot of all task statuses | `list[TaskStatus]` |
+| `/remove_task` | `POST` | Remove a completed/failed/cancelled task | `SimpleResponse` |
+| `/list_models` | `GET` | Get list of available OCR models | `list[ModelInfo]` |
+| `/download_model`| `POST` | Trigger model download in background | `SimpleResponse` |
+| `/check_gpu` | `GET` | Check system GPU/CUDA status | `GpuInfo` |
 
 ### Frontend Task Store
 
@@ -191,15 +162,16 @@ Pinia `task` store maintains the task list with computed slices:
 
 ### Frontend Event Listeners
 
-The `useTask` composable registers global event listeners on first call (`ensureListeners()`), routing events by `task_id`:
+The `useTask` composable registers global event listeners via `ipcListen` on first call, routing events by `task_id`:
 
 ```typescript
 ipcListen<TaskProgress>('task://progress', (progress) => {
   store.updateProgress(progress.task_id, progress)
 })
 ipcListen<TaskCompletedEvent>('task://completed', (payload) => {
-  store.completeTask(payload.task_id, result)
+  store.completeTask(payload.task_id, payload)
 })
+```
 ```
 
 ## PaddleOCR 3.x API Key Differences
@@ -272,11 +244,10 @@ pixi run check-gpu
 | `Unknown argument: use_gpu` | PaddleOCR 3.x removed this parameter | Use `paddle.device.set_device()` instead |
 | `Unknown argument: use_angle_cls` | Parameter renamed | Use `use_textline_orientation=True` |
 | `not enough values to unpack bbox` | Bbox is a 4-point polygon | Use `np.array(bbox)` to extract min/max |
-| `issubclass() arg 1 must be a class` | Used `from __future__ import annotations` | Remove the import, use Python 3.12 native annotations |
-| `Command X not found` | Frontend used `invoke` instead of `pyInvoke` | Use `pyInvoke` from `tauri-plugin-pytauri-api` |
-| `pytauri.pyfunc not allowed` | Tauri permissions not configured | Add `pytauri:default` to capabilities |
-| `No module named 'paddle_pdf'` | PYTHONPATH not set | Set `PYTHONPATH = "../src"` in pixi.toml tauri tasks |
-| PyO3 doesn't support Python 3.14 | System Python version too new | Use pixi's Python 3.12, set `PYO3_PYTHON` |
+| `partially initialized module 'paddle' has no attribute 'tensor' (circular import)` | Initialization order issues in the packaged environment leading to circular imports | Explicitly import base submodules (`paddle.base`, `paddle.tensor`, `paddle.nn`, `paddle.device`) at the very beginning of the PyInstaller runtime hook `rth_paddle.py` |
+| `No module named 'unittest'` (or `importlib.metadata.PackageNotFoundError`) | The packaged binary environment lacks standard `.dist-info` metadata folders, causing dependency version checks to crash | Monkeypatch `importlib.metadata.version` in `rth_paddle.py` to intercept searches and return mock version strings (e.g., `4.10.0.84` for opencv) if the module is actually importable |
+| GPU check returns False / CUDA DLLs not found in packaged build | Massive NVIDIA CUDA/cuDNN DLLs are not bundled to reduce binary size; system fails to locate local CUDA installations | Ensure local CUDA Toolkit 12.x and cuDNN are installed, and their `bin/` directories are in the PATH. The packaged app's runtime hook `rth_paddle.py` automatically scans standard paths and registers them using `os.add_dll_directory` |
+| `No module named 'paddle_pdf'` | PYTHONPATH not set | Set `PYTHONPATH = "../src"` in pixi.toml tauri tasks or use the correct python run commands |
 
 ## Known Limitations
 
