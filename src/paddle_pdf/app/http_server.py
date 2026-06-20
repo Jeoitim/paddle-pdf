@@ -244,6 +244,12 @@ async def shutdown():
 
 # -- Entry point ---------------------------------------------------------------
 def main() -> None:
+    # -- CLI mode fallback check --
+    # If the backend executable is called with arguments, execute the CLI mode instead of starting the HTTP server
+    if len(sys.argv) > 1:
+        from paddle_pdf.controller.cli_controller import main as cli_main
+        sys.exit(cli_main())
+
     import socket
     import threading
     import ctypes
