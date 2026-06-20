@@ -2,6 +2,7 @@
 from pathlib import Path
 
 SRC = str(Path(SPECPATH).parent / "src")
+HOOKS_DIR = str(Path(SPECPATH) / "hooks")
 
 hiddenimports = [
     "uvicorn.logging","uvicorn.loops","uvicorn.loops.auto",
@@ -9,9 +10,16 @@ hiddenimports = [
     "uvicorn.protocols.websockets","uvicorn.protocols.websockets.auto",
     "uvicorn.lifespan","uvicorn.lifespan.on",
     "anyio","anyio._backends._asyncio",
-    "paddle","paddle.base","paddleocr","paddlex",
+    # Paddle core — must be explicit to avoid circular import in frozen env
+    "paddle","paddle.fluid","paddle.base","paddle.tensor",
+    "paddle.nn","paddle.device","paddle.device.cuda",
+    "paddle.framework","paddle.static","paddle.jit",
+    "paddleocr","paddlex",
     "cv2","pymupdf","PIL","pydantic","pydantic_core",
     "fastapi","starlette","starlette.middleware.cors",
+    # Standard lib modules that paddle uses internally
+    "unittest","unittest.mock","xmlrpc","xmlrpc.client",
+    "distutils","distutils.version",
 ]
 
 excludes = [
@@ -32,7 +40,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=[HOOKS_DIR + "/rth_paddle.py"],
     excludes=excludes,
     noarchive=False,
 )
@@ -58,3 +66,4 @@ coll = COLLECT(
     strip=False, upx=False, upx_exclude=[],
     name="paddle_pdf_backend",
 )
+
